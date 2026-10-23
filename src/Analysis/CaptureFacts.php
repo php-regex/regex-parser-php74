@@ -114,7 +114,7 @@ final class CaptureFacts
 
     /**
      * @param bool $unicode  lengths count code points, and literals read as UTF-8
-     * @param bool $caseless some part of the pattern matches caselessly: no value set is read
+     * @param bool $caseless some part of the pattern matches caselessly: a value that may fold is not read
      * @param bool $ucp      \d and [[:digit:]] match non-ASCII digits: /u, or (*UCP)
      */
     public function __construct(
@@ -194,13 +194,9 @@ final class CaptureFacts
      */
     private function values(NodeInterface $node): ?array
     {
-        if ($this->caseless) {
-            return null;
-        }
-
         switch (true) {
             case $node instanceof LiteralNode:
-                return [$node->value];
+                return $this->folds($node->value) ? null : [$node->value];
             case $node instanceof CharLiteralNode:
                 return $this->character($node->codePoint);
             case $node instanceof SequenceNode:
@@ -320,7 +316,8 @@ final class CaptureFacts
      * The members a class holds, when each of them is a small finite set of
      * characters the pattern spells: literals and short ranges. A member too
      * big to spell — a type, a property, a long range, a negated class —
-     * leaves the whole class unread, as it always did.
+     * leaves the whole class unread, as it always did, and so does one that
+     * may fold under caseless matching.
      *
      * @return list<string>|null
      */
@@ -347,6 +344,10 @@ final class CaptureFacts
                 }
 
                 for ($codePoint = $from; $codePoint <= $to; $codePoint++) {
+                    if ($this->foldsCodePoint($codePoint)) {
+                        return null;
+                    }
+
                     $character = mb_chr($codePoint, 'UTF-8');
                     if (false === $character) {
                         return null;
@@ -363,6 +364,10 @@ final class CaptureFacts
                 // a reader that hands one in enumerates no member, and an
                 // empty enumeration reads as no constant downstream
                 foreach (mb_str_split($member->value, 1, 'UTF-8') as $character) {
+                    if ($this->folds($character)) {
+                        return null;
+                    }
+
                     $values[] = $character;
                 }
 
@@ -372,7 +377,7 @@ final class CaptureFacts
             // anything else a class holds — a type, a POSIX class, a
             // property — spells a set too large to enumerate
             $memberCodePoint = $this->codePointOf($member);
-            if (null === $memberCodePoint) {
+            if (null === $memberCodePoint || $this->foldsCodePoint($memberCodePoint)) {
                 return null;
             }
 
@@ -457,6 +462,10 @@ final class CaptureFacts
      */
     private function character(int $codePoint): ?array
     {
+        if ($this->foldsCodePoint($codePoint)) {
+            return null;
+        }
+
         if ($this->unicode) {
             $character = mb_chr($codePoint, 'UTF-8');
 
@@ -464,6 +473,47 @@ final class CaptureFacts
         }
 
         return $codePoint <= 0xFF ? [\chr($codePoint)] : null;
+    }
+
+    /**
+     * Whether caseless matching may fold a code point into another: an
+     * ASCII letter always folds — preg_match('/(ab£)/i', 'AB£') matches —
+     * and without /u nothing else does — preg_match('/(é)/i', 'É') is 0 —
+     * while under /u the engine folds by Unicode — preg_match('/é/iu',
+     * 'É') is 1 — where past 7 bits nothing is provable.
+     */
+    private function foldsCodePoint(int $codePoint): bool
+    {
+        if (!$this->caseless) {
+            return false;
+        }
+
+        if (self::isAsciiLetter($codePoint)) {
+            return true;
+        }
+
+        return $this->unicode && $codePoint >= 0x80;
+    }
+
+    /**
+     * Whether any byte of a string may fold, by the code point of each of
+     * them: past 7 bits, a byte is a code point in its own right without
+     * /u, and a piece of one under it.
+     */
+    private function folds(string $value): bool
+    {
+        for ($i = 0, $n = \strlen($value); $i < $n; $i++) {
+            if ($this->foldsCodePoint(\ord($value[$i]))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function isAsciiLetter(int $codePoint): bool
+    {
+        return ($codePoint >= 0x41 && $codePoint <= 0x5A) || ($codePoint >= 0x61 && $codePoint <= 0x7A);
     }
 
     /**
