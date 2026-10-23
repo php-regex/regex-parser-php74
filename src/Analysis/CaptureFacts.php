@@ -105,6 +105,14 @@ final class CaptureFacts
     private $facts;
 
     /**
+     * Nodes the scan reaches before any part of the pattern may have read
+     * a character, by object id: an alternation there is read at the start.
+     *
+     * @var array<int, true>
+     */
+    private $atStart = [];
+
+    /**
      * @param bool $unicode  lengths count code points, and literals read as UTF-8
      * @param bool $caseless some part of the pattern matches caselessly: no value set is read
      * @param bool $ucp      \d and [[:digit:]] match non-ASCII digits: /u, or (*UCP)
@@ -159,6 +167,15 @@ final class CaptureFacts
         ];
     }
 
+    /**
+     * Marks a node the scan reaches before any part of the pattern may have
+     * read a character. The analysis collects them before it asks for facts.
+     */
+    public function markAtStart(NodeInterface $node): void
+    {
+        $this->atStart[spl_object_id($node)] = true;
+    }
+
     private static function LOOKAROUNDS(): array
     {
         static $cache = null;
@@ -189,7 +206,7 @@ final class CaptureFacts
             case $node instanceof SequenceNode:
                 return $this->product(array_map(\Closure::fromCallable([$this, 'values']), $node->children));
             case $node instanceof AlternationNode:
-                return $this->union(array_map(\Closure::fromCallable([$this, 'values']), $node->alternatives));
+                return $this->alternationValues($node);
             case $node instanceof GroupNode:
                 return self::isLookaround($node) ? [''] : $this->values($node->child);
             case $node instanceof QuantifierNode:
@@ -208,6 +225,95 @@ final class CaptureFacts
             default:
                 return null;
         }
+    }
+
+    /**
+     * The branches' values — or the empty string alone, when the alternation
+     * sits at the start of the pattern and its first branch is a zero-width
+     * anchor that wins the match before any later branch is ever reached:
+     * the engine reads the branches left to right at each position and takes
+     * the leftmost, and "^" and "\b" read empty at the scan start.
+     *
+     * @return list<string>|null
+     */
+    private function alternationValues(AlternationNode $node): ?array
+    {
+        if (($this->atStart[spl_object_id($node)] ?? false) && $this->dominatesFromStart($node->alternatives)) {
+            return [''];
+        }
+
+        return $this->union(array_map(\Closure::fromCallable([$this, 'values']), $node->alternatives));
+    }
+
+    /**
+     * Whether a first branch of "^" or "\A" — which matches at the scan
+     * start whatever the subject holds — or of "\b", which matches at or
+     * before wherever a later branch starting with a word character can
+     * begin, keeps the later branches from ever filling the match.
+     *
+     * @param list<NodeInterface> $alternatives
+     */
+    private function dominatesFromStart(array $alternatives): bool
+    {
+        $first = $alternatives[0] ?? null;
+
+        if ($first instanceof AnchorNode && ('^' === $first->value || '\\A' === $first->value)) {
+            return true;
+        }
+
+        if (!$first instanceof AssertionNode || 'b' !== $first->value) {
+            return false;
+        }
+
+        foreach (\array_slice($alternatives, 1) as $alternative) {
+            $char = $this->firstConsumedChar($alternative);
+            if (null === $char || !self::isWordChar($char)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The first character a node may read, when it starts with a literal
+     * one; null for anything else.
+     */
+    private function firstConsumedChar(NodeInterface $node): ?string
+    {
+        if ($node instanceof LiteralNode) {
+            return '' === $node->value ? null : $node->value[0];
+        }
+
+        if ($node instanceof CharLiteralNode) {
+            $chars = $this->character($node->codePoint);
+
+            return null === $chars ? null : $chars[0];
+        }
+
+        if ($node instanceof SequenceNode) {
+            foreach ($node->children as $child) {
+                if (0 !== ($this->lengths($child)[1] ?? 1)) {
+                    return $this->firstConsumedChar($child);
+                }
+            }
+
+            return null;
+        }
+
+        if ($node instanceof GroupNode && !\in_array($node->type, self::LOOKAROUNDS(), true)) {
+            return $this->firstConsumedChar($node->child);
+        }
+
+        return null;
+    }
+
+    private static function isWordChar(string $char): bool
+    {
+        return ($char >= '0' && $char <= '9')
+            || ($char >= 'A' && $char <= 'Z')
+            || ($char >= 'a' && $char <= 'z')
+            || '_' === $char;
     }
 
     /**
@@ -433,7 +539,7 @@ final class CaptureFacts
             case $node instanceof CharClassNode:
                 return $node->isNegated ? !$this->holdsZero($node->expression) : $this->classMayHoldZero($node->expression);
             case $node instanceof SequenceNode:
-                return $this->lengths($node)[0] <= 1 && self::any($node->children, \Closure::fromCallable([$this, 'mayBeZero']));
+                return $this->sequenceMayBeZero($node->children);
             case $node instanceof AlternationNode:
                 return self::any($node->alternatives, \Closure::fromCallable([$this, 'mayBeZero']));
             case $node instanceof GroupNode:
@@ -445,6 +551,37 @@ final class CaptureFacts
             default:
                 return $this->readsZero($node, false) ?? true;
         }
+    }
+
+    /**
+     * Whether a concatenation may read "0" alone: some child reads it while
+     * every other child reads nothing — a mandatory character anywhere else
+     * pins the value off zero.
+     *
+     * @param list<NodeInterface> $children
+     */
+    private function sequenceMayBeZero(array $children): bool
+    {
+        foreach ($children as $candidate) {
+            if (!$this->mayBeZero($candidate)) {
+                continue;
+            }
+
+            $pinned = false;
+            foreach ($children as $child) {
+                if ($child !== $candidate && $this->lengths($child)[0] >= 1) {
+                    $pinned = true;
+
+                    break;
+                }
+            }
+
+            if (!$pinned) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
