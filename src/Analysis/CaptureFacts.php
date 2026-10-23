@@ -21,6 +21,7 @@ use PHPRegex\Parser\Node\CharClassNode;
 use PHPRegex\Parser\Node\CharLiteralNode;
 use PHPRegex\Parser\Node\CharTypeNode;
 use PHPRegex\Parser\Node\CommentNode;
+use PHPRegex\Parser\Node\ControlCharNode;
 use PHPRegex\Parser\Node\DefineNode;
 use PHPRegex\Parser\Node\GroupNode;
 use PHPRegex\Parser\Node\GroupType;
@@ -191,6 +192,8 @@ final class CaptureFacts
                 return self::isLookaround($node) ? [''] : $this->values($node->child);
             case $node instanceof QuantifierNode:
                 return $this->repeat($node);
+            case $node instanceof CharClassNode:
+                return $this->classMembers($node);
             case $node instanceof AnchorNode:
             case $node instanceof AssertionNode:
             case $node instanceof CommentNode:
@@ -203,6 +206,106 @@ final class CaptureFacts
             default:
                 return null;
         }
+    }
+
+    /**
+     * The members a class holds, when each of them is a small finite set of
+     * characters the pattern spells: literals and short ranges. A member too
+     * big to spell — a type, a property, a long range, a negated class —
+     * leaves the whole class unread, as it always did.
+     *
+     * @return list<string>|null
+     */
+    private function classMembers(CharClassNode $node): ?array
+    {
+        if ($node->isNegated) {
+            return null;
+        }
+
+        $members = $node->expression instanceof AlternationNode
+            ? $node->expression->alternatives
+            : [$node->expression];
+
+        $values = [];
+        foreach ($members as $member) {
+            if ($member instanceof RangeNode) {
+                $from = $this->codePointOf($member->start);
+                $to = $this->codePointOf($member->end);
+                // the parser refuses a reversed range; a member the code
+                // point of which it does not spell — a type, a property —
+                // leaves the class unread
+                if (null === $from || null === $to || $to < $from || $to - $from + 1 > self::MAX_VALUES) {
+                    return null;
+                }
+
+                for ($codePoint = $from; $codePoint <= $to; $codePoint++) {
+                    $character = mb_chr($codePoint, 'UTF-8');
+                    if (false === $character) {
+                        return null;
+                    }
+
+                    $values[] = $character;
+                }
+
+                continue;
+            }
+
+            if ($member instanceof LiteralNode) {
+                // the pattern never writes an empty literal into a class;
+                // a reader that hands one in enumerates no member, and an
+                // empty enumeration reads as no constant downstream
+                foreach (mb_str_split($member->value, 1, 'UTF-8') as $character) {
+                    $values[] = $character;
+                }
+
+                continue;
+            }
+
+            // anything else a class holds — a type, a POSIX class, a
+            // property — spells a set too large to enumerate
+            $memberCodePoint = $this->codePointOf($member);
+            if (null === $memberCodePoint) {
+                return null;
+            }
+
+            // a code point no character of the encoding spells — a
+            // surrogate under /u — leaves the class unread
+            $character = mb_chr($memberCodePoint, 'UTF-8');
+            if (false === $character) {
+                return null;
+            }
+
+            $values[] = $character;
+        }
+
+        if (\count($values) > self::MAX_VALUES) {
+            return null;
+        }
+
+        return $this->union([$values]);
+    }
+
+    /**
+     * The code point of a member a class spells by a single character,
+     * whatever the spelling; null for every other member.
+     */
+    private function codePointOf(NodeInterface $node): ?int
+    {
+        if ($node instanceof CharLiteralNode) {
+            return $node->codePoint;
+        }
+
+        if ($node instanceof ControlCharNode) {
+            return $node->codePoint;
+        }
+
+        if ($node instanceof LiteralNode && 1 === mb_strlen($node->value, 'UTF-8')) {
+            $codePoint = mb_ord($node->value, 'UTF-8');
+
+            return false === $codePoint ? null : $codePoint;
+        }
+
+        return null;
     }
 
     /**
