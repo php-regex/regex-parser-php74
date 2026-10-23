@@ -293,9 +293,9 @@ final class CaptureShape
 
         switch (true) {
             case $group->digitsOnly && $group->nonFalsy:
-                return 'non-falsy-string&numeric-string';
+                return 0 === $group->minLength ? "''|non-falsy-string&numeric-string" : 'non-falsy-string&numeric-string';
             case $group->digitsOnly:
-                return 'numeric-string';
+                return 0 === $group->minLength ? "''|numeric-string" : 'numeric-string';
             case $group->nonFalsy:
                 return 'non-falsy-string';
             case $group->minLength > 0:
