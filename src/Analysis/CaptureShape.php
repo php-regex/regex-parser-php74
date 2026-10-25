@@ -56,18 +56,25 @@ final class CaptureShape
     public $cases = [];
 
     /**
+     *
+     * @var \PHPRegex\Parser\Analysis\CaptureGroupShape|null
+     */
+    public $scanWhole;
+
+    /**
      * @internal built by CaptureShapeAnalyzer::analyze()
      *
      * @param array<int<1, max>, CaptureGroupShape> $groups keyed by group number, 1 to the capture count with no gap; branch reset groups sharing a number share a record
      * @param list<string>                          $marks  the names a (*MARK) verb, or a verb that sets one, may leave under "MARK"
      * @param list<self>                            $cases  shapes whose union covers every match, empty when the pattern is not split; a case shares no index with the alternatives of the pattern
      */
-    public function __construct(CaptureGroupShape $whole, array $groups, array $marks, array $cases = [])
+    public function __construct(CaptureGroupShape $whole, array $groups, array $marks, array $cases = [], ?CaptureGroupShape $scanWhole = null)
     {
         $this->whole = $whole;
         $this->groups = $groups;
         $this->marks = $marks;
         $this->cases = $cases;
+        $this->scanWhole = $scanWhole;
     }
 
     /**
@@ -150,10 +157,27 @@ final class CaptureShape
 
         $flags &= \PREG_OFFSET_CAPTURE | \PREG_UNMATCHED_AS_NULL;
         if (\PREG_SET_ORDER === $order) {
-            return 'list<'.$this->matchShape($flags).'>';
+            return 'list<'.$this->scanShape($flags).'>';
         }
 
         return $this->renderPatternOrder($flags);
+    }
+
+    /**
+     * The shape one match of a scan reads: the shape preg_replace_callback()
+     * hands its callback on each call and the shape of one row under
+     * PREG_SET_ORDER. A scan resumes after an empty match, so the whole
+     * widens to the scan values — a zero-width first branch that wins the
+     * single match does not win the scan. The flags are read as
+     * matchShape() reads them.
+     */
+    public function scanShape(int $flags = 0): string
+    {
+        if (null === $this->scanWhole) {
+            return $this->matchShape($flags);
+        }
+
+        return (new self($this->scanWhole, $this->groups, $this->marks, $this->cases))->matchShape($flags);
     }
 
     /**
@@ -168,10 +192,11 @@ final class CaptureShape
         $marks = 'array<int, '.implode('|', $this->markTypes()).'>';
         $items = [];
         foreach (CaptureLayout::ofMatchAll($this)->keys as $key) {
+            $whole = $this->scanWhole($key);
             $items[] = self::keyName($key).': '.($key->holdsMarksOnly()
                 ? $marks
                 // Once a match sets a mark, PHP writes the marks over the list of a group named MARK.
-                : 'list<'.self::entry(self::groupTypes($key, $unset), $key->alwaysSet, $offsets).'>'.($key->marks ? '|'.$marks : ''));
+                : 'list<'.self::entry(self::groupTypes($whole ?? $key, $unset), $key->alwaysSet, $offsets).'>'.($key->marks ? '|'.$marks : ''));
         }
 
         return 'array{'.implode(', ', $items).'}';
@@ -233,9 +258,26 @@ final class CaptureShape
      *
      * @return list<string>
      */
+    /**
+     * The key of the whole match read for a scan: a scan that resumes after
+     * an empty match reaches the later branches, so the whole widens to
+     * what a scan reads.
+     */
+    private function scanWhole(CaptureKey $key): ?CaptureKey
+    {
+        if (0 !== $key->key || null === $this->scanWhole || $key->groups !== [$this->whole]) {
+            return null;
+        }
+
+        return new CaptureKey($key->key, $key->optional, [$this->scanWhole], $key->unset, $key->marks, $key->alwaysSet);
+    }
+
+    /**
+     * @return list<string>
+     */
     private static function groupTypes(CaptureKey $key, string $unset): array
     {
-        $types = array_map(\Closure::fromCallable([self::class, 'valueType']), $key->groups);
+        $types = array_values(array_map(\Closure::fromCallable([self::class, 'valueType']), $key->groups));
         if ($key->unset) {
             $types[] = $unset;
         }

@@ -66,7 +66,7 @@ final class CharSetAnalyzer
     public function __construct(string $flags = '', string $startOptions = '')
     {
         $this->startOptions = $startOptions;
-        $this->unicodeMode = false !== strpos($flags, 'u');
+        $this->unicodeMode = false !== strpos($flags, 'u') || false !== strpos($startOptions, '(*UCP)');
         $this->dot = self::dotSet(false !== strpos($flags, 's'), StartOptions::newline($startOptions));
     }
 

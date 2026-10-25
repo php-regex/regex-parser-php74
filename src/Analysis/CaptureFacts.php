@@ -176,6 +176,18 @@ final class CaptureFacts
         $this->atStart[spl_object_id($node)] = true;
     }
 
+    /**
+     * What the node reads across a whole scan, every branch joined: the
+     * dominance above speaks for one match, and a scan that resumes after
+     * an empty match still reaches the later branches.
+     *
+     * @return list<string>|null
+     */
+    public function scanValues(NodeInterface $node): ?array
+    {
+        return $this->values($node, true);
+    }
+
     private static function LOOKAROUNDS(): array
     {
         static $cache = null;
@@ -192,7 +204,7 @@ final class CaptureFacts
      *
      * @return list<string>|null
      */
-    private function values(NodeInterface $node): ?array
+    private function values(NodeInterface $node, bool $scan = false): ?array
     {
         switch (true) {
             case $node instanceof LiteralNode:
@@ -200,13 +212,13 @@ final class CaptureFacts
             case $node instanceof CharLiteralNode:
                 return $this->character($node->codePoint);
             case $node instanceof SequenceNode:
-                return $this->product(array_map(\Closure::fromCallable([$this, 'values']), $node->children));
+                return $this->product(array_map(fn (NodeInterface $child): ?array => $this->values($child, $scan), $node->children));
             case $node instanceof AlternationNode:
-                return $this->alternationValues($node);
+                return $this->alternationValues($node, $scan);
             case $node instanceof GroupNode:
-                return self::isLookaround($node) ? [''] : $this->values($node->child);
+                return self::isLookaround($node) ? [''] : $this->values($node->child, $scan);
             case $node instanceof QuantifierNode:
-                return $this->repeat($node);
+                return $this->repeat($node, $scan);
             case $node instanceof CharClassNode:
                 return $this->classMembers($node);
             case $node instanceof AnchorNode:
@@ -232,13 +244,13 @@ final class CaptureFacts
      *
      * @return list<string>|null
      */
-    private function alternationValues(AlternationNode $node): ?array
+    private function alternationValues(AlternationNode $node, bool $scan = false): ?array
     {
-        if (($this->atStart[spl_object_id($node)] ?? false) && $this->dominatesFromStart($node->alternatives)) {
+        if (!$scan && ($this->atStart[spl_object_id($node)] ?? false) && $this->dominatesFromStart($node->alternatives)) {
             return [''];
         }
 
-        return $this->union(array_map(\Closure::fromCallable([$this, 'values']), $node->alternatives));
+        return $this->union(array_map(fn (NodeInterface $branch): ?array => $this->values($branch, $scan), $node->alternatives));
     }
 
     /**
@@ -424,10 +436,10 @@ final class CaptureFacts
     /**
      * @return list<string>|null
      */
-    private function repeat(QuantifierNode $node): ?array
+    private function repeat(QuantifierNode $node, bool $scan = false): ?array
     {
         $bounds = QuantifierBounds::parse($node->quantifier);
-        $body = $this->values($node->node);
+        $body = $this->values($node->node, $scan);
         if (null === $bounds || null === $body || null === $bounds->max) {
             return null;
         }

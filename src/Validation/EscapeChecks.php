@@ -449,8 +449,6 @@ final class EscapeChecks
             // as outside a class.
             if (null !== $this->source && $this->startsNamedCodePoint($this->source, $node->getEndPosition())) {
                 $this->validateNamedCharacterBraces($this->source, $node->getEndPosition());
-
-                return;
             }
 
             // "\N{" that is no count PCRE2 reads there, and any from 10.45,
@@ -1231,13 +1229,6 @@ final class EscapeChecks
      */
     private function validateNamedCharacterBraces(string $source, int $position): void
     {
-        // Unreachable: the lexer only leaves "\N" as an escaped letter when
-        // a brace follows it, and inside a class "{U+" is checked first. It
-        // guards a caller that did not check.
-        if ('{' !== ($source[$position] ?? '')) {
-            return;
-        }
-
         if ($this->startsNamedCodePoint($source, $position)) {
             $digits = $position + 1 + strspn($source, self::BRACE_PADDING, $position + 1) + 2;
 

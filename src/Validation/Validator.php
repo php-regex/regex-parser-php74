@@ -18,6 +18,7 @@ use PHPRegex\Parser\Analysis\GroupIndex;
 use PHPRegex\Parser\Engine\LibraryPcre;
 use PHPRegex\Parser\Engine\PcreEngine;
 use PHPRegex\Parser\ErrorCode;
+use PHPRegex\Parser\Exception\InternalFailureException;
 use PHPRegex\Parser\Exception\SemanticErrorException;
 use PHPRegex\Parser\Node\AlternationNode;
 use PHPRegex\Parser\Node\AnchorNode;
@@ -1592,9 +1593,7 @@ final class Validator extends AbstractNodeVisitor
             return $node->codePoint >= 0 ? $node->codePoint : null;
         }
 
-        // Unreachable from a parsed pattern: guardRangeEndpoint() and
-        // isSingleCharNode() leave only the node types above as endpoints.
-        return null;
+        throw InternalFailureException::unexpectedState('A range endpoint is neither a literal, a character escape nor a control character.');
     }
 
     private function describeRange(RangeNode $node): string
@@ -1618,7 +1617,7 @@ final class Validator extends AbstractNodeVisitor
             case $node instanceof ControlCharNode:
                 return '\c'.$node->char;
             default:
-                return '?';
+                throw InternalFailureException::unexpectedState('A range endpoint is neither a literal, a character escape nor a control character.');
         }
     }
 

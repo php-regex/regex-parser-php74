@@ -17,6 +17,7 @@ use PHPRegex\Parser\Analysis\GroupIndex;
 use PHPRegex\Parser\Analysis\LookbehindLength;
 use PHPRegex\Parser\Engine\CharacterTables;
 use PHPRegex\Parser\Engine\LibraryPcre;
+use PHPRegex\Parser\Exception\InternalFailureException;
 use PHPRegex\Parser\Node\AlternationNode;
 use PHPRegex\Parser\Node\AnchorNode;
 use PHPRegex\Parser\Node\AssertionNode;
@@ -1082,14 +1083,14 @@ final class CompiledLength
         return $this->characterRepeat($codePoint, $caseless)[1] ?? null;
     }
 
-    private function literalLength(string $value, bool $caseless): ?int
+    private function literalLength(string $value, bool $caseless): int
     {
         $characters = $this->utf ? mb_str_split($value, 1, 'UTF-8') : Bytes::split($value);
         $length = 0;
         foreach ($characters as $character) {
             $units = $this->characterLength($this->utf ? (int) mb_ord($character, 'UTF-8') : \ord($character), $caseless);
             if (null === $units) {
-                return null;
+                throw InternalFailureException::unexpectedState('A character of a literal has no compiled length.');
             }
 
             $length += $units;
@@ -1818,16 +1819,6 @@ final class CompiledLength
      */
     private function isBlank(NodeInterface $node): bool
     {
-        if ($node instanceof SequenceNode) {
-            foreach ($node->children as $child) {
-                if (!$this->isBlank($child)) {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
         return self::isEmpty($node) || $node instanceof CommentNode
             || ($node instanceof GroupNode && GroupType::InlineFlags() === $node->type && $this->setsOptionsOnly($node));
     }

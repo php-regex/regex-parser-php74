@@ -445,8 +445,6 @@ final class ReferenceChecks
             if (0 === strncmp($numPart, '-', strlen('-')) && Ascii::isDigit((string) substr($numPart, 1))) {
                 $num = (int) $numPart;
                 $this->assertRelativeReferenceExists($num, $node->startPosition, ErrorCode::SubroutineRecursion(), 'Recursion condition');
-
-                return;
             }
         }
 

@@ -50,7 +50,7 @@ final class CaptureShapeAnalyzer
      * Rises in any release that changes an answer: a fact, or either string
      * CaptureShape writes, the matchShape() one or the matchAllShape() one.
      */
-    public const ANALYSIS_VERSION = '4';
+    public const ANALYSIS_VERSION = '7';
 
     private const MAX_CASES = 16;
 
@@ -215,7 +215,17 @@ final class CaptureShapeAnalyzer
         $this->collectAtStart($wholePattern);
         $whole = $this->facts->of($wholePattern);
 
-        return new CaptureShape(new CaptureGroupShape(0, null, Participation::Always(), $whole['min'], $whole['max'], $whole['values'], $whole['nonFalsy'], $whole['digitsOnly']), $groups, $this->marks);
+        // a zero-width first branch wins every single match and not the
+        // scan: the whole a scan reads joins the later branches' values
+        $scanWhole = null;
+        if ([''] === $whole['values']) {
+            $scan = $this->facts->scanValues($wholePattern);
+            if ($scan !== ['']) {
+                $scanWhole = new CaptureGroupShape(0, null, Participation::Always(), $whole['min'], $whole['max'], $scan, $whole['nonFalsy'], $whole['digitsOnly']);
+            }
+        }
+
+        return new CaptureShape(new CaptureGroupShape(0, null, Participation::Always(), $whole['min'], $whole['max'], $whole['values'], $whole['nonFalsy'], $whole['digitsOnly']), $groups, $this->marks, [], $scanWhole);
     }
 
     /**
@@ -417,12 +427,17 @@ final class CaptureShapeAnalyzer
 
         $set = array_values(array_filter($occurrences, static fn (array $occurrence): bool => !$occurrence['never']));
 
+        $beforeAnyAccept = [] !== $set && !\in_array(true, array_map(
+            static fn (array $occurrence): bool => $occurrence['after_accept'],
+            $set,
+        ), true);
+
         switch (true) {
             case [] === $set:
                 $participation = Participation::Never();
 
                 break;
-            case $guaranteed && !$this->accepts:
+            case $guaranteed && $beforeAnyAccept:
                 $participation = Participation::Always();
 
                 break;
@@ -563,7 +578,7 @@ final class CaptureShapeAnalyzer
             } else {
                 $read = $this->facts->of($node->child);
             }
-            $this->occurrences[$number][] = ['name' => $node->name, 'never' => $never] + $read;
+            $this->occurrences[$number][] = ['name' => $node->name, 'never' => $never, 'after_accept' => $this->accepts] + $read;
 
             return [$number => true] + $this->walk($node->child, $never);
         }
