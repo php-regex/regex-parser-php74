@@ -211,6 +211,26 @@ final class CaptureFacts
     }
 
     /**
+     * What each branch reads, when the node is an alternation, seen through
+     * the groups that read what their content reads: (a|\d) reads 'a' or a
+     * digit. Empty for any other node.
+     *
+     * @return list<Facts>
+     */
+    public function arms(NodeInterface $node, bool $group = false): array
+    {
+        while ($node instanceof GroupNode && \in_array($node->type, self::READ_THROUGH(), true) && !self::isBareOption($node)) {
+            $node = $node->child;
+        }
+
+        if (!$node instanceof AlternationNode) {
+            return [];
+        }
+
+        return array_map(fn (NodeInterface $branch): array => $this->of($branch, $group), $node->alternatives);
+    }
+
+    /**
      * Marks a node the scan reaches before any part of the pattern may have
      * read a character. The analysis collects them before it asks for facts.
      */
@@ -247,6 +267,19 @@ final class CaptureFacts
     public function scanValues(NodeInterface $node): ?array
     {
         return $this->values($node, true);
+    }
+
+    /**
+     * Groups that read what their content reads.
+     */
+    private static function READ_THROUGH(): array
+    {
+        static $cache = null;
+        if (null === $cache) {
+            $cache = [GroupType::Capturing(), GroupType::Named(), GroupType::NonCapturing(), GroupType::Atomic(), GroupType::BranchReset(), GroupType::InlineFlags()];
+        }
+
+        return $cache;
     }
 
     private static function LOOKAROUNDS(): array
@@ -915,6 +948,15 @@ final class CaptureFacts
         $codePoint = mb_ord($node->value, 'UTF-8');
 
         return false === $codePoint ? null : $codePoint;
+    }
+
+    /**
+     * Whether the group is a bare "(?i)", which spans its flags and three
+     * bytes and reads nothing, rather than a scoped "(?i:...)".
+     */
+    private static function isBareOption(GroupNode $node): bool
+    {
+        return GroupType::InlineFlags() === $node->type && $node->getEndPosition() - $node->getStartPosition() === \strlen($node->flags ?? '') + 3;
     }
 
     private static function isLookaround(GroupNode $node): bool
