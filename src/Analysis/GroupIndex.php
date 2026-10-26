@@ -230,8 +230,9 @@ final class GroupIndex
 
     /**
      * The groups a call returns, "(?1(2,<n>))" in PCRE2 10.47, by number:
-     * the first group bearing each number or name, a relative number
-     * counted from where the call sits, as the call's own is.
+     * the first group bearing each number, every group bearing each name,
+     * a relative number counted from where the call sits, as the call's
+     * own is.
      *
      * @return array<int<1, max>, GroupNode>
      */
@@ -243,16 +244,18 @@ final class GroupIndex
             if (1 === LibraryPcre::match('/^[+-]\d++$/', $reference)) {
                 $next = $this->nextNumberAt($node);
                 $offset = (int) $reference;
-                $found = null === $next || 0 === $offset ? [] : $this->byNumber[$offset < 0 ? $next + $offset : $next + $offset - 1] ?? [];
+                $found = null === $next || 0 === $offset ? [] : \array_slice($this->byNumber[$offset < 0 ? $next + $offset : $next + $offset - 1] ?? [], 0, 1);
             } elseif (1 === LibraryPcre::match('/^\d++$/', $reference)) {
-                $found = $this->byNumber[(int) $reference] ?? [];
+                $found = \array_slice($this->byNumber[(int) $reference] ?? [], 0, 1);
             } else {
                 $found = $this->byName[$reference] ?? [];
             }
 
-            $number = [] === $found ? null : $this->numberOf($found[0]);
-            if (null !== $number && $number > 0) {
-                $groups[$number] = $found[0];
+            foreach ($found as $group) {
+                $number = $this->numberOf($group);
+                if (null !== $number && $number > 0) {
+                    $groups[$number] = $group;
+                }
             }
         }
 
