@@ -282,11 +282,15 @@ final class CaptureFacts
         return $cache;
     }
 
+    /**
+     * Groups that read no character of the subject: the lookarounds, and a
+     * substring scan, which matches inside a capture already read.
+     */
     private static function LOOKAROUNDS(): array
     {
         static $cache = null;
         if (null === $cache) {
-            $cache = [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative()];
+            $cache = [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative(), GroupType::ScanSubstring()];
         }
 
         return $cache;
