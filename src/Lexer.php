@@ -502,7 +502,7 @@ final class Lexer
      *
      * @var bool
      */
-    private $pcre2Ten32;
+    private $classBadEscapeStaysRefused;
 
     /**
      * The PHP and PCRE2 judged, which say what a bad escape is.
@@ -551,7 +551,7 @@ final class Lexer
         $this->overflowingNumberIsOctal = $target->supports(PcreFeature::OverflowingBackslashNumberIsOctal());
         $this->phpVersionId = $target->phpVersionId;
         $this->target = $target;
-        $this->pcre2Ten32 = !$target->supports(PcreFeature::BadEscapeInClassStaysRefused());
+        $this->classBadEscapeStaysRefused = !$target->supports(PcreFeature::BadEscapeInClassStaysRefused());
         $this->wideRepeatCounts = $target->supports(PcreFeature::OpenAndPaddedRepeatCounts());
         $this->readsScanSubstring = $target->supports(PcreFeature::ScanSubstring());
         $this->readsExtendedClass = $target->supports(PcreFeature::ExtendedCharClass());
@@ -1677,12 +1677,13 @@ final class Lexer
 
             if (TokenType::LiteralEscaped() === $type) {
                 // "\c" only falls through to an escaped literal when no
-                // printable ASCII character follows it; PCRE rejects that.
+                // character it can XOR with 0x40 follows it; PCRE
+                // rejects that.
                 if ('\\c' === $matchedValue) {
                     $this->refusedTokenStart = $startPos;
 
                     throw LexerException::withContext(
-                        '\\c must be followed by a printable ASCII character.',
+                        '\\c must be followed by a character it can read.',
                         ErrorCode::ControlCharInvalid(),
                         $this->target->faultOffset($this->afterCharacter($startPos + 2), $this->afterCharacter($startPos + 2) - $startPos - 2),
                         $this->pattern,
@@ -2561,7 +2562,7 @@ final class Lexer
     private function startsRangeEnd(array $tokens): bool
     {
         // Only a class escape may be refused there; a character never is.
-        if (!$this->pcre2Ten32 || !$this->inCharClass || false === strpos(BadEscape::CLASS_ESCAPE_LETTERS, $this->pattern[$this->position + 1] ?? '')) {
+        if (!$this->classBadEscapeStaysRefused || !$this->inCharClass || false === strpos(BadEscape::CLASS_ESCAPE_LETTERS, $this->pattern[$this->position + 1] ?? '')) {
             return false;
         }
 

@@ -1427,13 +1427,35 @@ final class PatternPrinter extends AbstractNodeVisitor
             } elseif (\ord($char) < 32 || 127 === \ord($char) || (!$unicodeMode && \ord($char) >= 128)) {
                 switch (\ord($char)) {
                     case 8:
+                        $escape = $this->inCharClass ? '\\b' : '\\x08';
+
+                        break;
                     case 9:
+                        $escape = '\\t';
+
+                        break;
                     case 10:
+                        $escape = '\\n';
+
+                        break;
                     case 13:
+                        $escape = '\\r';
+
+                        break;
                     case 12:
+                        $escape = '\\f';
+
+                        break;
                     case 27:
+                        $escape = '\\e';
+
+                        break;
                     default:
+                        $escape = '\\x'.Ascii::upper(str_pad(dechex(\ord($char)), 2, '0', \STR_PAD_LEFT));
+
+                        break;
                 }
+                $result .= $escape;
             } else {
                 $result .= $char;
             }

@@ -36,6 +36,7 @@ use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\SequenceNode;
 use PHPRegex\Parser\Text\Ascii;
+use PHPRegex\Parser\Text\Bytes;
 
 /**
  * @internal
@@ -95,14 +96,21 @@ final class CaptureFacts
     private $calculator;
 
     /**
-     * @var \WeakMap<NodeInterface, LengthRange>
+     * @var \SplObjectStorage<NodeInterface, LengthRange>
      */
     private $lengths;
 
     /**
-     * @var \WeakMap<NodeInterface, Facts>
+     * @var \SplObjectStorage<NodeInterface, Facts>
+     *
      */
     private $facts;
+
+    /**
+     * @var \SplObjectStorage<NodeInterface, Facts>
+     *
+     */
+    private $groupFacts;
 
     /**
      * Nodes the scan reaches before any part of the pattern may have read
@@ -111,6 +119,14 @@ final class CaptureFacts
      * @var array<int, true>
      */
     private $atStart = [];
+
+    /**
+     * Nodes nothing in the pattern follows, by object id: an alternation
+     * there is not left by backtracking from a later part that fails.
+     *
+     * @var array<int, true>
+     */
+    private $atEnd = [];
 
     /**
      * @param bool $unicode  lengths count code points, and literals read as UTF-8
@@ -126,8 +142,9 @@ final class CaptureFacts
         $this->caseless = $caseless;
         $this->ucp = $ucp;
         $this->calculator = new LengthRangeCalculator($unicode);
-        $this->lengths = new \WeakMap();
-        $this->facts = new \WeakMap();
+        $this->lengths = new \SplObjectStorage();
+        $this->facts = new \SplObjectStorage();
+        $this->groupFacts = new \SplObjectStorage();
     }
 
     /**
@@ -145,18 +162,23 @@ final class CaptureFacts
      * its values, whether every value is truthy (nonFalsy), and whether
      * every value is a non-empty run of ASCII digits (digitsOnly).
      *
+     * A group's facts hold for every match of a scan, so they never take
+     * the dominance of a zero-width first branch: a scan resumes after an
+     * empty match, where "^" no longer matches.
+     *
      * @return Facts
      */
-    public function of(NodeInterface $node): array
+    public function of(NodeInterface $node, bool $group = false): array
     {
-        if (isset($this->facts[$node])) {
-            return $this->facts[$node];
+        $cache = $group ? $this->groupFacts : $this->facts;
+        if (isset($cache[$node])) {
+            return $cache[$node];
         }
 
         [$min, $max] = $this->lengths($node);
-        $values = $this->values($node);
+        $values = $this->values($node, $group);
 
-        return $this->facts[$node] = [
+        return $cache[$node] = [
             'min' => $min,
             'max' => $max,
             'values' => $values,
@@ -174,6 +196,15 @@ final class CaptureFacts
     public function markAtStart(NodeInterface $node): void
     {
         $this->atStart[spl_object_id($node)] = true;
+    }
+
+    /**
+     * Marks a node nothing in the pattern follows. The analysis collects
+     * them before it asks for facts.
+     */
+    public function markAtEnd(NodeInterface $node): void
+    {
+        $this->atEnd[spl_object_id($node)] = true;
     }
 
     /**
@@ -237,16 +268,19 @@ final class CaptureFacts
 
     /**
      * The branches' values — or the empty string alone, when the alternation
-     * sits at the start of the pattern and its first branch is a zero-width
-     * anchor that wins the match before any later branch is ever reached:
-     * the engine reads the branches left to right at each position and takes
-     * the leftmost, and "^" and "\b" read empty at the scan start.
+     * sits at the start of the pattern, nothing follows it, and its first
+     * branch is a zero-width anchor that wins the match before any later
+     * branch is ever reached: the engine reads the branches left to right at
+     * each position and takes the leftmost, and "^" and "\b" read empty at
+     * the scan start. Anything after the alternation could fail and send
+     * the engine back into the later branches: /(^|a)b/ matches "ab".
      *
      * @return list<string>|null
      */
     private function alternationValues(AlternationNode $node, bool $scan = false): ?array
     {
-        if (!$scan && ($this->atStart[spl_object_id($node)] ?? false) && $this->dominatesFromStart($node->alternatives)) {
+        $id = spl_object_id($node);
+        if (!$scan && ($this->atStart[$id] ?? false) && ($this->atEnd[$id] ?? false) && $this->dominatesFromStart($node->alternatives)) {
             return [''];
         }
 
@@ -356,16 +390,12 @@ final class CaptureFacts
                 }
 
                 for ($codePoint = $from; $codePoint <= $to; $codePoint++) {
-                    if ($this->foldsCodePoint($codePoint)) {
+                    $character = $this->character($codePoint);
+                    if (null === $character) {
                         return null;
                     }
 
-                    $character = mb_chr($codePoint, 'UTF-8');
-                    if (false === $character) {
-                        return null;
-                    }
-
-                    $values[] = $character;
+                    $values[] = $character[0];
                 }
 
                 continue;
@@ -374,8 +404,10 @@ final class CaptureFacts
             if ($member instanceof LiteralNode) {
                 // the pattern never writes an empty literal into a class;
                 // a reader that hands one in enumerates no member, and an
-                // empty enumeration reads as no constant downstream
-                foreach (mb_str_split($member->value, 1, 'UTF-8') as $character) {
+                // empty enumeration reads as no constant downstream. Without
+                // /u a class matches one byte: [é] matches "\xc3" and "\xa9"
+                $characters = $this->unicode ? mb_str_split($member->value, 1, 'UTF-8') : Bytes::split($member->value);
+                foreach ($characters as $character) {
                     if ($this->folds($character)) {
                         return null;
                     }
@@ -389,18 +421,14 @@ final class CaptureFacts
             // anything else a class holds — a type, a POSIX class, a
             // property — spells a set too large to enumerate
             $memberCodePoint = $this->codePointOf($member);
-            if (null === $memberCodePoint || $this->foldsCodePoint($memberCodePoint)) {
-                return null;
-            }
-
             // a code point no character of the encoding spells — a
-            // surrogate under /u — leaves the class unread
-            $character = mb_chr($memberCodePoint, 'UTF-8');
-            if (false === $character) {
+            // surrogate under /u, past 255 without it — leaves the class unread
+            $character = null === $memberCodePoint ? null : $this->character($memberCodePoint);
+            if (null === $character) {
                 return null;
             }
 
-            $values[] = $character;
+            $values[] = $character[0];
         }
 
         if (\count($values) > self::MAX_VALUES) {

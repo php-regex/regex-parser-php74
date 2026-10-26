@@ -131,7 +131,7 @@ final class PatternInfo
      * @param ?\PHPRegex\Parser\NewlineConvention::* $newline
      * @param ?\PHPRegex\Parser\BsrConvention::*     $bsr
      */
-    public function __construct(int $captureCount, array $names, int $maxBackreference, int $minMatchLength, ?int $maxMatchLength, int $maxLookbehind, bool $usesBackslashC, ?int $matchLimit, ?int $depthLimit, ?int $heapLimit, ?PHPRegex\Parser\NewlineConvention $newline, ?PHPRegex\Parser\NewlineConvention $bsr, bool $anchoredStart, bool $anchoredEnd)
+    public function __construct(int $captureCount, array $names, int $maxBackreference, int $minMatchLength, ?int $maxMatchLength, int $maxLookbehind, bool $usesBackslashC, ?int $matchLimit, ?int $depthLimit, ?int $heapLimit, ?\PHPRegex\Parser\NewlineConvention $newline, ?\PHPRegex\Parser\BsrConvention $bsr, bool $anchoredStart, bool $anchoredEnd)
     {
         $this->captureCount = $captureCount;
         $this->names = $names;

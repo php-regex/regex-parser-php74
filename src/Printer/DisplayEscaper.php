@@ -204,12 +204,33 @@ final class DisplayEscaper
             $byte = \ord($value[$i]);
             switch ($byte) {
                 case 0x0A:
+                    $spelling = '\\n';
+
+                    break;
                 case 0x0D:
+                    $spelling = '\\r';
+
+                    break;
                 case 0x09:
+                    $spelling = '\\t';
+
+                    break;
                 case 0x5C:
+                    $spelling = '\\\\';
+
+                    break;
                 case 0x22:
+                    $spelling = '\\"';
+
+                    break;
                 default:
+                    $spelling = ($byte < 0x20 || $byte > 0x7E)
+                        ? \sprintf('\\x%02X', $byte)
+                        : $value[$i];
+
+                    break;
             }
+            $escaped .= $spelling;
         }
 
         return $open.'"'.$escaped.'"'.$close;

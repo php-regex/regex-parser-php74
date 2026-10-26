@@ -228,19 +228,20 @@ final class DelimiterBrackets
                 $bracket = $body[$quoted ? $at + 1 : $at];
                 switch ($bracket) {
                     case '{':
-                        $bare[$i] = 1 !== LibraryPcre::match($repeat, $body, $matches, 0, $at)
+                        $standsBare = 1 !== LibraryPcre::match($repeat, $body, $matches, 0, $at)
                             && !($i >= 2 && '\\' === $body[$i - 2] && Ascii::isAlpha($body[$i - 1]));
 
                         break;
                     case '[':
-                        $bare[$i] = false === strpos(':.=', $body[$at + 1] ?? ':');
+                        $standsBare = false === strpos(':.=', $body[$at + 1] ?? ':');
 
                         break;
                     default:
-                        $bare[$i] = true;
+                        $standsBare = true;
 
                         break;
                 }
+                $bare[$i] = !$quoted && $standsBare;
                 $tokens[] = [$i, $opening === $bracket, true];
                 $i = $quoted ? $at + 2 : $at + 1;
 
@@ -270,9 +271,19 @@ final class DelimiterBrackets
             $bracket = $body[$bracketAt];
             switch (true) {
                 case !isset($unescaped[$at]):
+                    $spelling = '\\'.$bracket;
+
+                    break;
                 case $bare[$at]:
+                    $spelling = $bracket;
+
+                    break;
                 default:
+                    $spelling = '\\Q'.$bracket.'\\E';
+
+                    break;
             }
+            $result .= substr($body, $from, $at - $from).$spelling;
             $from = $bracketAt + 1;
         }
 
@@ -326,11 +337,27 @@ final class DelimiterBrackets
 
             switch (true) {
                 case self::KIND_GROUP === $kind:
+                    $spelling = self::groupSpelling((string) substr($body, $start + \strlen($mark) + 1, $end - $start - \strlen($mark) - 1), $included[$index]);
+
+                    break;
                 case self::KIND_COMMENT === $kind:
+                    $spelling = $included[$index] ? $bracket : '';
+
+                    break;
                 case !$included[$index]:
+                    $spelling = '\\'.$bracket;
+
+                    break;
                 case self::KIND_LITERAL === $kind && self::standsBare($body, $start, $end, $bracket, $mark):
+                    $spelling = $bracket;
+
+                    break;
                 default:
+                    $spelling = '\\Q'.$bracket.'\\E';
+
+                    break;
             }
+            $result .= substr($body, $from, $start - $from).$spelling;
             $from = $end;
         }
 

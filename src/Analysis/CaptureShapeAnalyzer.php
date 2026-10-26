@@ -50,7 +50,7 @@ final class CaptureShapeAnalyzer
      * Rises in any release that changes an answer: a fact, or either string
      * CaptureShape writes, the matchShape() one or the matchAllShape() one.
      */
-    public const ANALYSIS_VERSION = '7';
+    public const ANALYSIS_VERSION = '8';
 
     private const MAX_CASES = 16;
 
@@ -62,7 +62,7 @@ final class CaptureShapeAnalyzer
     private $next = 1;
 
     /**
-     * @var array<int<1, max>, list<array{name: ?string, never: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool}>>
+     * @var array<int<1, max>, list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool}>>
      */
     private $occurrences = [];
 
@@ -197,6 +197,7 @@ final class CaptureShapeAnalyzer
     {
         $this->reset();
         $this->collectAtStart($pattern);
+        $this->collectAtEnd($pattern);
 
         $guaranteed = $this->walk($pattern, false);
 
@@ -213,6 +214,7 @@ final class CaptureShapeAnalyzer
 
         $wholePattern = $this->rebuild($pattern) ?? self::nothing($pattern);
         $this->collectAtStart($wholePattern);
+        $this->collectAtEnd($wholePattern);
         $whole = $this->facts->of($wholePattern);
 
         // a zero-width first branch wins every single match and not the
@@ -250,6 +252,36 @@ final class CaptureShapeAnalyzer
 
         foreach ($node->getChildren() as $child) {
             $this->collectAtStart($child);
+        }
+    }
+
+    /**
+     * Marks the nodes nothing in the pattern follows: the last child of a
+     * sequence, every branch of an alternation, the child of a group. A
+     * repeated node may be followed by its own next iteration.
+     */
+    private function collectAtEnd(NodeInterface $node): void
+    {
+        $this->facts->markAtEnd($node);
+
+        if ($node instanceof SequenceNode) {
+            if ([] !== $node->children) {
+                $this->collectAtEnd($node->children[array_key_last($node->children)]);
+            }
+
+            return;
+        }
+
+        if ($node instanceof AlternationNode) {
+            foreach ($node->alternatives as $alternative) {
+                $this->collectAtEnd($alternative);
+            }
+
+            return;
+        }
+
+        if ($node instanceof GroupNode) {
+            $this->collectAtEnd($node->child);
         }
     }
 
@@ -413,8 +445,8 @@ final class CaptureShapeAnalyzer
     }
 
     /**
-     * @param int<1, max>                                                                                                                   $number
-     * @param list<array{name: ?string, never: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool}> $occurrences
+     * @param int<1, max>                                                                                                                                       $number
+     * @param list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool}> $occurrences
      */
     private function group(int $number, array $occurrences, bool $guaranteed): CaptureGroupShape
     {
@@ -425,7 +457,7 @@ final class CaptureShapeAnalyzer
             $name ??= $occurrence['name'];
         }
 
-        $set = array_values(array_filter($occurrences, static fn (array $occurrence): bool => !$occurrence['never']));
+        $set = array_values(array_filter($occurrences, static fn (array $occurrence): bool => false === $occurrence['never']));
 
         $beforeAnyAccept = [] !== $set && !\in_array(true, array_map(
             static fn (array $occurrence): bool => $occurrence['after_accept'],
@@ -576,7 +608,7 @@ final class CaptureShapeAnalyzer
                 [$min, $max] = $this->facts->lengths($node->child);
                 $read = ['min' => $min, 'max' => $max, 'values' => null, 'nonFalsy' => false, 'digitsOnly' => false];
             } else {
-                $read = $this->facts->of($node->child);
+                $read = $this->facts->of($node->child, true);
             }
             $this->occurrences[$number][] = ['name' => $node->name, 'never' => $never, 'after_accept' => $this->accepts] + $read;
 

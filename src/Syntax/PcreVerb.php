@@ -105,7 +105,7 @@ final class PcreVerb
     /**
      * @param ?\PHPRegex\Parser\Node\GroupType::* $assertion
      */
-    private function __construct(string $name, ?PHPRegex\Parser\ErrorCode $assertion = null, ?string $payload = null, ?int $matchLimit = null, int $payloadOffset = 0, bool $nonAtomic = false, bool $atomicScriptRun = false, ?string $scanSubstring = null)
+    private function __construct(string $name, ?\PHPRegex\Parser\Node\GroupType $assertion = null, ?string $payload = null, ?int $matchLimit = null, int $payloadOffset = 0, bool $nonAtomic = false, bool $atomicScriptRun = false, ?string $scanSubstring = null)
     {
         /*
          * The verb as it should be recorded, which is not what was written

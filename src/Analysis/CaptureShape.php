@@ -229,18 +229,19 @@ final class CaptureShape
             $types = self::groupTypes($key, $unset);
             switch (true) {
                 case !$key->marks:
-                    $items[] = self::entry($types, $key->alwaysSet, $offsets);
+                    $entry = self::entry($types, $key->alwaysSet, $offsets);
 
                     break;
                 case $offsets:
-                    $items[] = self::entry($types, $key->alwaysSet, true).'|'.implode('|', $this->markTypes());
+                    $entry = self::entry($types, $key->alwaysSet, true).'|'.implode('|', $this->markTypes());
 
                     break;
                 default:
-                    $items[] = self::entry(array_merge($types, $this->markTypes()), $key->alwaysSet, false);
+                    $entry = self::entry(array_merge($types, $this->markTypes()), $key->alwaysSet, false);
 
                     break;
             }
+            $items[] = self::keyName($key).': '.$entry;
             $values += $pair;
         }
 
@@ -252,12 +253,6 @@ final class CaptureShape
         return $key->key.($key->optional ? '?' : '');
     }
 
-    /**
-     * What the key holds from its groups: the value of each, and what an
-     * unset group reads when the key may hold it.
-     *
-     * @return list<string>
-     */
     /**
      * The key of the whole match read for a scan: a scan that resumes after
      * an empty match reaches the later branches, so the whole widens to
