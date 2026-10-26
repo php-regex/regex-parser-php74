@@ -40,7 +40,7 @@ use PHPRegex\Parser\Node\SubroutineNode;
  * unset, its values are unknown and its facts are false.
  *
  * One alternation holding capturing groups, reached from the root through
- * sequences and groups that neither capture nor repeat, splits the answer
+ * sequences and groups that do not repeat, splits the answer
  * into one case per branch, plus one where no branch is taken when that
  * group is optional. Without such an alternation, one conditional group
  * holding capturing groups splits it the same way, a case per branch; and
@@ -183,11 +183,15 @@ final class CaptureShapeAnalyzer
      * Groups that neither capture nor assert: the split node may sit
      * inside them.
      */
+    /**
+     * Groups a split reaches through: they run whenever their parent does,
+     * and a capturing one is set in every case.
+     */
     private static function PATH_GROUPS(): array
     {
         static $cache = null;
         if (null === $cache) {
-            $cache = [GroupType::NonCapturing(), GroupType::Atomic(), GroupType::InlineFlags()];
+            $cache = [GroupType::NonCapturing(), GroupType::Atomic(), GroupType::InlineFlags(), GroupType::Capturing(), GroupType::Named()];
         }
 
         return $cache;
@@ -439,7 +443,7 @@ final class CaptureShapeAnalyzer
 
     /**
      * The nodes holding capturing groups that the node reaches through
-     * sequences and groups that neither capture nor repeat: alternations,
+     * sequences and groups that do not repeat: alternations,
      * conditional groups, and optional groups holding two capturing groups
      * or more, those holding neither an alternation nor a conditional group
      * reached the same way; blocked when a branch reset holding capturing
@@ -467,14 +471,15 @@ final class CaptureShapeAnalyzer
 
         if (null === $optional && $node instanceof QuantifierNode && $node->node instanceof GroupNode && self::isOptional($node)) {
             if (\in_array($node->node->type, self::PATH_GROUPS(), true)) {
+                // A branch reset inside blocks a split there, not the one on the group itself.
                 $reached = self::reach($node->node, $node, $path);
-                if ($reached['blocked'] || [] !== $reached['found']) {
+                if (!$reached['blocked'] && [] !== $reached['found']) {
                     return $reached;
                 }
             }
 
             // Run or skipped, the group sets its groups together: split when it holds more than one.
-            $splits = \in_array($node->node->type, array_merge(self::PATH_GROUPS(), [GroupType::Capturing(), GroupType::Named()]), true) && self::countCaptures($node->node) > 1;
+            $splits = \in_array($node->node->type, self::PATH_GROUPS(), true) && self::countCaptures($node->node) > 1;
 
             return ['blocked' => false, 'found' => $splits ? [['choice' => $node, 'optional' => $node, 'path' => $path]] : []];
         }
