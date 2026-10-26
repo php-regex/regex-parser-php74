@@ -35,6 +35,7 @@ use PHPRegex\Parser\Node\GroupType;
 use PHPRegex\Parser\Node\KeepNode;
 use PHPRegex\Parser\Node\LimitMatchNode;
 use PHPRegex\Parser\Node\LiteralNode;
+use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
 use PHPRegex\Parser\Node\QuantifierBounds;
@@ -65,12 +66,23 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
     private $unicode = false;
 
     /**
-     * @param bool $unicode whether lengths count UTF-8 characters rather than
-     *                      bytes; a whole pattern sets it from its flags
+     * @var \Closure(SubroutineNode):?NodeInterface|null
+     *
      */
-    public function __construct(bool $unicode = false)
+    private $calledBody;
+
+    /**
+     * A call reads as unbounded from zero, unless $calledBody gives the body
+     * it runs: the call then reads as long as that body. It must give none
+     * for a recursion, whose length is unknown.
+     *
+     * @param bool                                            $unicode    whether lengths count UTF-8 characters rather than bytes; a whole pattern sets it from its flags
+     * @param (\Closure(SubroutineNode): ?NodeInterface)|null $calledBody the body a call runs, or null where it is unknown
+     */
+    public function __construct(bool $unicode = false, ?\Closure $calledBody = null)
     {
         $this->unicode = $unicode;
+        $this->calledBody = $calledBody;
     }
 
     #[\Override]
@@ -266,7 +278,9 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
     #[\Override]
     public function visitSubroutine(SubroutineNode $node): array
     {
-        return [0, null]; // Subroutines can be complex
+        $body = null === $this->calledBody ? null : ($this->calledBody)($node);
+
+        return (($nullsafeVariable1 = $body) ? $nullsafeVariable1->accept($this) : null) ?? [0, null];
     }
 
     #[\Override]
@@ -290,7 +304,7 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
     #[\Override]
     public function visitScriptRun(ScriptRunNode $node): array
     {
-        return (($nullsafeVariable1 = $node->content) ? $nullsafeVariable1->accept($this) : null) ?? [0, null];
+        return (($nullsafeVariable2 = $node->content) ? $nullsafeVariable2->accept($this) : null) ?? [0, null];
     }
 
     #[\Override]

@@ -490,8 +490,7 @@ final class Lexer
     private $overflowingNumberIsOctal;
 
     /**
-     * The PHP judged, and whether its PCRE2 is 10.32, which reads more
-     * escapes as literals in a class than the later releases.
+     * The PHP judged.
      *
      *
      * @var int
@@ -499,10 +498,15 @@ final class Lexer
     private $phpVersionId;
 
     /**
+     * Whether an escape a class refuses once it has read it, as "[\B]",
+     * "[\N]" or the "\d" of "[a-\d]", is read as its letter under
+     * PCRE2_EXTRA_BAD_ESCAPE_IS_LITERAL, as PCRE2 10.32 reads it: the
+     * negation of PcreFeature::BadEscapeInClassStaysRefused().
+     *
      *
      * @var bool
      */
-    private $classBadEscapeStaysRefused;
+    private $classBadEscapeReadAsLetter;
 
     /**
      * The PHP and PCRE2 judged, which say what a bad escape is.
@@ -551,7 +555,7 @@ final class Lexer
         $this->overflowingNumberIsOctal = $target->supports(PcreFeature::OverflowingBackslashNumberIsOctal());
         $this->phpVersionId = $target->phpVersionId;
         $this->target = $target;
-        $this->classBadEscapeStaysRefused = !$target->supports(PcreFeature::BadEscapeInClassStaysRefused());
+        $this->classBadEscapeReadAsLetter = !$target->supports(PcreFeature::BadEscapeInClassStaysRefused());
         $this->wideRepeatCounts = $target->supports(PcreFeature::OpenAndPaddedRepeatCounts());
         $this->readsScanSubstring = $target->supports(PcreFeature::ScanSubstring());
         $this->readsExtendedClass = $target->supports(PcreFeature::ExtendedCharClass());
@@ -2562,7 +2566,7 @@ final class Lexer
     private function startsRangeEnd(array $tokens): bool
     {
         // Only a class escape may be refused there; a character never is.
-        if (!$this->classBadEscapeStaysRefused || !$this->inCharClass || false === strpos(BadEscape::CLASS_ESCAPE_LETTERS, $this->pattern[$this->position + 1] ?? '')) {
+        if (!$this->classBadEscapeReadAsLetter || !$this->inCharClass || false === strpos(BadEscape::CLASS_ESCAPE_LETTERS, $this->pattern[$this->position + 1] ?? '')) {
             return false;
         }
 

@@ -158,7 +158,7 @@ final class CaptureFacts
         $this->unicode = $unicode;
         $this->ucp = $ucp;
         $this->groups = $groups;
-        $this->calculator = new LengthRangeCalculator($unicode);
+        $this->calculator = new LengthRangeCalculator($unicode, \Closure::fromCallable([$this, 'calledBody']));
         $this->lengths = new \SplObjectStorage();
         $this->facts = new \SplObjectStorage();
         $this->groupFacts = new \SplObjectStorage();
@@ -171,10 +171,6 @@ final class CaptureFacts
      */
     public function lengths(NodeInterface $node): array
     {
-        if ($node instanceof SubroutineNode && null !== ($body = $this->calledBody($node))) {
-            return $this->lengths[$node] ??= $this->lengths($body);
-        }
-
         return $this->lengths[$node] ??= $node->accept($this->calculator);
     }
 

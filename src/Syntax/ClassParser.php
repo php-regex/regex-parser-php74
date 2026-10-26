@@ -71,12 +71,15 @@ final class ClassParser
     private $target;
 
     /**
-     * Whether the PCRE2 judged is 10.32.
+     * Whether an escape a class refuses once it has read it, as "[\B]",
+     * "[\N]" or the "\d" of "[a-\d]", is read as its letter under
+     * PCRE2_EXTRA_BAD_ESCAPE_IS_LITERAL, as PCRE2 10.32 reads it: the
+     * negation of PcreFeature::BadEscapeInClassStaysRefused().
      *
      *
      * @var bool
      */
-    private $classBadEscapeStaysRefused;
+    private $classBadEscapeReadAsLetter;
 
     public function __construct(ParseState $state)
     {
@@ -84,7 +87,7 @@ final class ClassParser
         $this->stream = $state->stream;
         $this->pattern = $state->pattern;
         $this->target = $state->target;
-        $this->classBadEscapeStaysRefused = !$state->target->supports(PcreFeature::BadEscapeInClassStaysRefused());
+        $this->classBadEscapeReadAsLetter = !$state->target->supports(PcreFeature::BadEscapeInClassStaysRefused());
     }
 
     /**
@@ -555,7 +558,7 @@ final class ClassParser
         $endAt = $this->stream->current()->position;
         $endsAsInvalidRange = !$this->target->supports(PcreFeature::ClassEscapeEndingRangeRefusedAsEscape())
             && !($this->state->badEscapeIsLiteral && BadEscape::at($this->pattern, $endAt, true, $this->state->unicodeMode, $this->target, null, true));
-        if ($endsAsInvalidRange && TokenType::UnicodeProp() !== $this->stream->current()->type && BadEscape::endsRangeAsInvalidRange($this->pattern, $endAt, $this->classBadEscapeStaysRefused)) {
+        if ($endsAsInvalidRange && TokenType::UnicodeProp() !== $this->stream->current()->type && BadEscape::endsRangeAsInvalidRange($this->pattern, $endAt, $this->classBadEscapeReadAsLetter)) {
             $this->throwEscapeEndingRange($endAt);
         }
 
