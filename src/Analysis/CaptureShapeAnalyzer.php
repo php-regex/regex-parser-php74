@@ -14,14 +14,13 @@ declare(strict_types=1);
 namespace PHPRegex\Parser\Analysis;
 
 use PHPRegex\Parser\Node\AlternationNode;
-use PHPRegex\Parser\Node\CharClassNode;
-use PHPRegex\Parser\Node\CharLiteralNode;
+use PHPRegex\Parser\Node\AnchorNode;
+use PHPRegex\Parser\Node\AssertionNode;
 use PHPRegex\Parser\Node\ConditionalNode;
 use PHPRegex\Parser\Node\DefineNode;
 use PHPRegex\Parser\Node\GroupNode;
 use PHPRegex\Parser\Node\GroupType;
 use PHPRegex\Parser\Node\KeepNode;
-use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\QuantifierBounds;
@@ -59,7 +58,7 @@ final class CaptureShapeAnalyzer
      * Rises in any release that changes an answer: a fact, or either string
      * CaptureShape writes, the matchShape() one or the matchAllShape() one.
      */
-    public const ANALYSIS_VERSION = '12';
+    public const ANALYSIS_VERSION = '13';
 
     private const MAX_CASES = 16;
 
@@ -77,12 +76,17 @@ final class CaptureShapeAnalyzer
     private const SPLIT_KINDS = [AlternationNode::class, ConditionalNode::class, QuantifierNode::class];
 
     /**
+     * The verbs that set the newline convention; the last one holds.
+     */
+    private const NEWLINE_VERBS = ['CR', 'LF', 'CRLF', 'ANYCRLF', 'ANY', 'NUL'];
+
+    /**
      * @var int<1, max>
      */
     private $next = 1;
 
     /**
-     * @var array<int<1, max>, list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool, arms: list<Facts>}>>
+     * @var array<int<1, max>, list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool, decimalInt: bool, lowercase: bool, uppercase: bool, arms: list<Facts>}>>
      */
     private $occurrences = [];
 
@@ -114,6 +118,33 @@ final class CaptureShapeAnalyzer
      * @var bool
      */
     private $hasCalls = false;
+
+    /**
+     * The newline convention a verb sets, null for the default: LF, as
+     * PHP's bundled PCRE2 is built.
+     *
+     * @var string|null
+     */
+    private $newline;
+
+    /**
+     * "$" matches at the very end only: /D.
+     *
+     * @var bool
+     */
+    private $dollarEndOnly = false;
+
+    /**
+     * @var bool
+     */
+    private $unicode = false;
+
+    /**
+     * Anchors the engine reads in multiline mode, by object id.
+     *
+     * @var array<int, true>
+     */
+    private $multiline = [];
 
     /**
      * The case under analysis: the node it splits (an alternation, a
@@ -156,10 +187,17 @@ final class CaptureShapeAnalyzer
     {
         $this->ucp = false !== strpos($ast->flags, 'u');
         $this->hasCalls = false;
+        $this->newline = null;
+        $this->dollarEndOnly = false !== strpos($ast->flags, 'D');
+        $this->unicode = $ast->isUnicode();
+        $this->multiline = [];
         $this->scan($ast->pattern);
         $this->groups = GroupIndex::of($ast->pattern);
         $this->facts = new CaptureFacts($ast->isUnicode(), $this->ucp, $this->groups);
-        $this->collectCaseless($ast->pattern, false !== strpos($ast->flags, 'i'));
+        $this->collectOption($ast->pattern, false !== strpos($ast->flags, 'i'), 'i', \Closure::fromCallable([$this->facts, 'markCaseless']));
+        $this->collectOption($ast->pattern, false !== strpos($ast->flags, 'm'), 'm', function (NodeInterface $node): void {
+            $this->multiline[spl_object_id($node)] = true;
+        });
         $this->selection = null;
 
         $merged = $this->shape($ast->pattern);
@@ -176,7 +214,7 @@ final class CaptureShapeAnalyzer
         }
         $this->selection = null;
 
-        return new CaptureShape($merged->whole, $merged->groups, $merged->marks, $cases);
+        return new CaptureShape($merged->whole, $merged->groups, $merged->marks, $cases, null, $merged->subject);
     }
 
     /**
@@ -228,6 +266,20 @@ final class CaptureShapeAnalyzer
     }
 
     /**
+     * Groups an anchor pins the subject through: they read what their
+     * content reads, where it reads it.
+     */
+    private static function ANCHOR_GROUPS(): array
+    {
+        static $cache = null;
+        if (null === $cache) {
+            $cache = [GroupType::Capturing(), GroupType::Named(), GroupType::NonCapturing(), GroupType::Atomic(), GroupType::BranchReset(), GroupType::InlineFlags()];
+        }
+
+        return $cache;
+    }
+
+    /**
      * The shape of every match, or of the matches of the selected case.
      */
     private function shape(NodeInterface $pattern): CaptureShape
@@ -244,31 +296,277 @@ final class CaptureShapeAnalyzer
             $groups[$number] = $this->group($number, $occurrences, isset($guaranteed[$number]));
         }
 
-        // \K and (*ACCEPT) cut the whole match short: only its presence is known.
-        if ($this->keeps || $this->accepts) {
-            return new CaptureShape(new CaptureGroupShape(0, null, Participation::Always(), 0, null, null), $groups, $this->marks);
-        }
-
         $wholePattern = $this->rebuild($pattern) ?? self::nothing($pattern);
         $this->collectAtStart($wholePattern);
         $this->collectAtEnd($wholePattern);
         $whole = $this->facts->of($wholePattern);
+        // read as a group's are, with no zero-width first branch winning:
+        // the arms hold for every match of a scan too
+        $arms = $this->facts->arms($wholePattern, true);
+
+        // (*ACCEPT) may end the match before the end anchor; \K moves the
+        // start of the match, not what the pattern read from the subject
+        $subject = $this->accepts ? null : $this->subject($wholePattern, $whole, $arms);
+
+        // \K and (*ACCEPT) cut the whole match short: only its presence is known.
+        if ($this->keeps || $this->accepts) {
+            return new CaptureShape(new CaptureGroupShape(0, null, Participation::Always(), 0, null, null), $groups, $this->marks, [], null, $subject);
+        }
 
         // a zero-width first branch wins every single match and not the
         // scan: the whole a scan reads joins the later branches' values
         $scanWhole = null;
         if ([''] === $whole['values']) {
-            $scan = $this->facts->scanValues($wholePattern);
-            if ($scan !== ['']) {
-                $scanWhole = new CaptureGroupShape(0, null, Participation::Always(), $whole['min'], $whole['max'], $scan, $whole['nonFalsy'], $whole['digitsOnly']);
+            $scan = $this->facts->of($wholePattern, true);
+            if ($scan['values'] !== ['']) {
+                $scanWhole = self::record(0, null, Participation::Always(), $scan);
             }
         }
 
-        // read as a group's are, with no zero-width first branch winning:
-        // the arms hold for every match of a scan too
-        $arms = self::arms(0, null, Participation::Always(), $whole['values'], $whole['digitsOnly'], $this->facts->arms($wholePattern, true));
+        return new CaptureShape(self::record(0, null, Participation::Always(), $whole, $arms), $groups, $this->marks, [], $scanWhole, $subject);
+    }
 
-        return new CaptureShape(new CaptureGroupShape(0, null, Participation::Always(), $whole['min'], $whole['max'], $whole['values'], $whole['nonFalsy'], $whole['digitsOnly'], $arms), $groups, $this->marks, [], $scanWhole);
+    /**
+     * What the subject holds when a match proves the pattern read all of
+     * it: every match starts at the start of the subject and ends at its
+     * end, or before a final newline where the end anchor lets one through.
+     * Null when the pattern does not pin both ends.
+     *
+     * @param Facts       $whole what the pattern reads
+     * @param list<Facts> $arms  what each of its branches reads
+     */
+    private function subject(NodeInterface $pattern, array $whole, array $arms): ?CaptureGroupShape
+    {
+        $end = $this->endOfSubject($pattern);
+        if (null === $end || !$this->startsAtSubjectStart($pattern)) {
+            return null;
+        }
+
+        $newlines = 'end' === $end ? [] : $this->newlines();
+
+        return self::record(0, null, Participation::Always(), $this->followedBy($whole, $newlines), array_map(fn (array $arm): array => $this->followedBy($arm, $newlines), $arms));
+    }
+
+    /**
+     * What a value reads followed by nothing or by one of the newlines: the
+     * newlines hold no letter and no digit, and keep a value truthy.
+     *
+     * @param Facts        $facts
+     * @param list<string> $newlines
+     *
+     * @return Facts
+     */
+    private function followedBy(array $facts, array $newlines): array
+    {
+        if ([] === $newlines) {
+            return $facts;
+        }
+
+        $values = $facts['values'];
+        if (null !== $values) {
+            foreach ($facts['values'] as $value) {
+                foreach ($newlines as $newline) {
+                    $values[] = $value.$newline;
+                }
+            }
+            $values = \count($values) > CaptureFacts::MAX_VALUES ? null : $values;
+        }
+
+        $longest = max(array_map(fn (string $newline): int => $this->unicode ? mb_strlen($newline, 'UTF-8') : \strlen($newline), $newlines));
+
+        return ['values' => $values, 'max' => null === $facts['max'] ? null : $facts['max'] + $longest, 'digitsOnly' => false, 'decimalInt' => false] + $facts;
+    }
+
+    /**
+     * The newlines "$" and "\Z" match before at the end of the subject,
+     * under the newline convention of the pattern.
+     *
+     * @return non-empty-list<string>
+     */
+    private function newlines(): array
+    {
+        switch ($this->newline) {
+            case 'CR':
+                return ["\r"];
+            case 'CRLF':
+                return ["\r\n"];
+            case 'ANYCRLF':
+                return ["\r", "\n", "\r\n"];
+            case 'ANY':
+                return array_merge(["\r", "\n", "\r\n", "\x0b", "\x0c"], $this->unicode ? ["\u{85}", "\u{2028}", "\u{2029}"] : ["\x85"]);
+            case 'NUL':
+                return ["\0"];
+            default:
+                return ["\n"];
+        }
+    }
+
+    /**
+     * Whether every match of the node starts at the start of the subject:
+     * "\A", or "^" without multiline, first on every path. What reads
+     * nothing before the anchor leaves the match where it starts. "\G"
+     * stands at the offset, and so does /A.
+     */
+    private function startsAtSubjectStart(NodeInterface $node): bool
+    {
+        switch (true) {
+            case $node instanceof AnchorNode:
+                return '^' === $node->value && !isset($this->multiline[spl_object_id($node)]);
+            case $node instanceof AssertionNode:
+                return 'A' === $node->value;
+            case $node instanceof SequenceNode:
+                return $this->firstPinned($node->children, \Closure::fromCallable([$this, 'startsAtSubjectStart']));
+            case $node instanceof AlternationNode:
+                return self::every($node->alternatives, \Closure::fromCallable([$this, 'startsAtSubjectStart']));
+            case $node instanceof GroupNode:
+                return \in_array($node->type, self::ANCHOR_GROUPS(), true) && $this->startsAtSubjectStart($node->child);
+            case $node instanceof QuantifierNode:
+                return (QuantifierBounds::parse($node->quantifier)->min ?? 0) >= 1 && $this->startsAtSubjectStart($node->node);
+            case $node instanceof ConditionalNode:
+                return $this->startsAtSubjectStart($node->yes) && $this->startsAtSubjectStart($node->no);
+            default:
+                return false;
+        }
+    }
+
+    /**
+     * Where every match of the node ends: at the end of the subject ('end'),
+     * there or before a final newline ('newline'), or anywhere (null). "\z",
+     * and "$" under /D, end it; "\Z", and "$" without /D, may leave a
+     * newline; under multiline "$" ends a line. What reads nothing after the
+     * anchor leaves the match where it ends.
+     *
+     * @return 'end'|'newline'|null
+     */
+    private function endOfSubject(NodeInterface $node): ?string
+    {
+        switch (true) {
+            case $node instanceof AnchorNode:
+                return '$' !== $node->value || isset($this->multiline[spl_object_id($node)]) ? null : ($this->dollarEndOnly ? 'end' : 'newline');
+            case $node instanceof AssertionNode:
+                switch ($node->value) {
+                    case 'z':
+                        return 'end';
+                    case 'Z':
+                        return 'newline';
+                    default:
+                        return null;
+                }
+                // no break
+            case $node instanceof SequenceNode:
+                return $this->lastPinned(array_reverse($node->children));
+            case $node instanceof AlternationNode:
+                return self::joinEnds(array_map(\Closure::fromCallable([$this, 'endOfSubject']), $node->alternatives));
+            case $node instanceof GroupNode:
+                return \in_array($node->type, self::ANCHOR_GROUPS(), true) ? $this->endOfSubject($node->child) : null;
+            case $node instanceof QuantifierNode:
+                return (QuantifierBounds::parse($node->quantifier)->min ?? 0) >= 1 ? $this->endOfSubject($node->node) : null;
+            case $node instanceof ConditionalNode:
+                return self::joinEnds([$this->endOfSubject($node->yes), $this->endOfSubject($node->no)]);
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Whether the first child that is pinned, past those that read nothing,
+     * comes before any child that reads a character.
+     *
+     * @param list<NodeInterface>           $children
+     * @param callable(NodeInterface): bool $pinned
+     */
+    private function firstPinned(array $children, callable $pinned): bool
+    {
+        foreach ($children as $child) {
+            if ($pinned($child)) {
+                return true;
+            }
+
+            if (0 !== $this->facts->lengths($child)[1]) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Where the last child that pins the end does, past those that read
+     * nothing, read from the last child back.
+     *
+     * @param list<NodeInterface> $children from the last
+     *
+     * @return 'end'|'newline'|null
+     */
+    private function lastPinned(array $children): ?string
+    {
+        foreach ($children as $child) {
+            $end = $this->endOfSubject($child);
+            if (null !== $end) {
+                return $end;
+            }
+
+            if (0 !== $this->facts->lengths($child)[1]) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<'end'|'newline'|null> $ends
+     *
+     * @return 'end'|'newline'|null
+     */
+    private static function joinEnds(array $ends): ?string
+    {
+        if ([] === $ends || \in_array(null, $ends, true)) {
+            return null;
+        }
+
+        return \in_array('newline', $ends, true) ? 'newline' : 'end';
+    }
+
+    /**
+     * array_all() of PHP 8.4.
+     *
+     * @param list<NodeInterface>           $nodes
+     * @param callable(NodeInterface): bool $test
+     */
+    private static function every(array $nodes, callable $test): bool
+    {
+        foreach ($nodes as $node) {
+            if (!$test($node)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The record of a group, or of the whole match, from what it reads.
+     *
+     * @param Facts       $facts
+     * @param list<Facts> $arms  what each way it is set reads
+     */
+    private static function record(int $number, ?string $name, $participation, array $facts, array $arms = []): CaptureGroupShape
+    {
+        return new CaptureGroupShape(
+            $number,
+            $name,
+            $participation,
+            $facts['min'],
+            $facts['max'],
+            $facts['values'],
+            $facts['nonFalsy'],
+            $facts['digitsOnly'],
+            $facts['decimalInt'],
+            $facts['lowercase'],
+            $facts['uppercase'],
+            self::arms($number, $name, $participation, $facts, $arms),
+        );
     }
 
     /**
@@ -337,12 +635,17 @@ final class CaptureShapeAnalyzer
     }
 
     /**
-     * Reads what the whole pattern turns on: UCP, calls.
+     * Reads what the whole pattern turns on: UCP, calls, the newline
+     * convention.
      */
     private function scan(NodeInterface $node): void
     {
         if ($node instanceof PcreVerbNode && 'UCP' === $node->verb) {
             $this->ucp = true;
+        }
+
+        if ($node instanceof PcreVerbNode && \in_array($node->verb, self::NEWLINE_VERBS, true)) {
+            $this->newline = $node->verb;
         }
 
         if ($node instanceof SubroutineNode) {
@@ -355,56 +658,54 @@ final class CaptureShapeAnalyzer
     }
 
     /**
-     * Marks the characters and classes the engine reads caselessly, and
-     * returns whether it reads caselessly after the node. As in PCRE, a bare
+     * Marks the nodes the engine reads under an option, "i" or "m", and
+     * returns whether the option holds after the node. As in PCRE, a bare
      * "(?i)" holds to the end of its group, the following branches
      * included; a scoped "(?i:...)" holds inside; any group, like a
      * conditional, gives back at its end what held at its start.
+     *
+     * @param \Closure(NodeInterface): void $mark
      */
-    private function collectCaseless(NodeInterface $node, bool $caseless): bool
+    private function collectOption(NodeInterface $node, bool $on, string $option, \Closure $mark): bool
     {
         if ($node instanceof GroupNode && GroupType::InlineFlags() === $node->type && null !== $node->flags) {
-            $inside = self::caselessAfter($caseless, $node->flags);
+            $inside = self::optionAfter($on, $node->flags, $option);
             // a bare "(?i)" spans its flags and three bytes, a scoped "(?i:)" one more
             if ($node->getEndPosition() - $node->getStartPosition() === \strlen($node->flags) + 3) {
                 return $inside;
             }
 
-            $this->collectCaseless($node->child, $inside);
+            $this->collectOption($node->child, $inside, $option, $mark);
 
-            return $caseless;
+            return $on;
         }
 
-        if ($node instanceof LiteralNode || $node instanceof CharLiteralNode || $node instanceof CharClassNode) {
-            if ($caseless) {
-                $this->facts->markCaseless($node);
-            }
-
-            return $caseless;
+        if ($on) {
+            $mark($node);
         }
 
-        $carried = $caseless;
+        $carried = $on;
         foreach ($node->getChildren() as $child) {
-            $carried = $this->collectCaseless($child, $carried);
+            $carried = $this->collectOption($child, $carried, $option, $mark);
         }
 
-        return $node instanceof SequenceNode || $node instanceof AlternationNode ? $carried : $caseless;
+        return $node instanceof SequenceNode || $node instanceof AlternationNode ? $carried : $on;
     }
 
     /**
-     * Whether caseless matching holds after inline flags such as "i", "-i",
-     * "^" or "i-i", when it held before them.
+     * Whether an option holds after inline flags such as "i", "-i", "^" or
+     * "i-i", when it held before them.
      */
-    private static function caselessAfter(bool $caseless, string $flags): bool
+    private static function optionAfter(bool $on, string $flags, string $option): bool
     {
         if (0 === strncmp($flags, '^', strlen('^'))) {
-            $caseless = false;
+            $on = false;
             $flags = (string) substr($flags, 1);
         }
 
-        [$on, $off] = explode('-', $flags, 2) + [1 => ''];
+        [$set, $unset] = explode('-', $flags, 2) + [1 => ''];
 
-        return false === strpos($off, 'i') && ($caseless || false !== strpos($on, 'i'));
+        return false === strpos($unset, $option) && ($on || false !== strpos($set, $option));
     }
 
     /**
@@ -593,8 +894,8 @@ final class CaptureShapeAnalyzer
     }
 
     /**
-     * @param int<1, max>                                                                                                                                                          $number
-     * @param list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool, arms: list<Facts>}> $occurrences
+     * @param int<1, max>                                                                                                                                                                                                              $number
+     * @param list<array{name: ?string, never: bool, after_accept: bool, min: int, max: int|null, values: list<string>|null, nonFalsy: bool, digitsOnly: bool, decimalInt: bool, lowercase: bool, uppercase: bool, arms: list<Facts>}> $occurrences
      */
     private function group(int $number, array $occurrences, bool $guaranteed): CaptureGroupShape
     {
@@ -627,19 +928,21 @@ final class CaptureShapeAnalyzer
                 break;
         }
 
-        $values = [];
-        $min = null;
-        $max = 0;
-        $nonFalsy = [] !== $set;
-        $digitsOnly = [] !== $set;
+        $join = ['min' => null, 'max' => 0, 'values' => [], 'nonFalsy' => [] !== $set, 'digitsOnly' => [] !== $set, 'decimalInt' => [] !== $set, 'lowercase' => [] !== $set, 'uppercase' => [] !== $set];
         foreach ([] === $set ? $occurrences : $set as $occurrence) {
-            $values = null === $values || null === $occurrence['values'] ? null : array_merge(is_array($values) ? $values : iterator_to_array($values), is_array($occurrence['values']) ? $occurrence['values'] : iterator_to_array($occurrence['values']));
-            $min = null === $min ? $occurrence['min'] : min($min, $occurrence['min']);
-            $max = null === $max || null === $occurrence['max'] ? null : max($max, $occurrence['max']);
-            $nonFalsy = $nonFalsy && $occurrence['nonFalsy'];
-            $digitsOnly = $digitsOnly && $occurrence['digitsOnly'];
+            $join = [
+                'min' => null === $join['min'] ? $occurrence['min'] : min($join['min'], $occurrence['min']),
+                'max' => null === $join['max'] || null === $occurrence['max'] ? null : max($join['max'], $occurrence['max']),
+                'values' => null === $join['values'] || null === $occurrence['values'] ? null : array_merge(is_array($join['values']) ? $join['values'] : iterator_to_array($join['values']), is_array($occurrence['values']) ? $occurrence['values'] : iterator_to_array($occurrence['values'])),
+                'nonFalsy' => $join['nonFalsy'] && $occurrence['nonFalsy'],
+                'digitsOnly' => $join['digitsOnly'] && $occurrence['digitsOnly'],
+                'decimalInt' => $join['decimalInt'] && $occurrence['decimalInt'],
+                'lowercase' => $join['lowercase'] && $occurrence['lowercase'],
+                'uppercase' => $join['uppercase'] && $occurrence['uppercase'],
+            ];
         }
 
+        $values = $join['values'];
         if (null !== $values) {
             $values = array_values(array_unique($values));
             $values = \count($values) > CaptureFacts::MAX_VALUES ? null : $values;
@@ -655,31 +958,36 @@ final class CaptureShapeAnalyzer
             $arms = array_merge($arms, $occurrence['arms']);
         }
 
-        return new CaptureGroupShape($number, $name, $participation, $min ?? 0, $max, [] === $set ? null : $values, $nonFalsy, $digitsOnly, self::arms($number, $name, $participation, $values, $digitsOnly, $arms));
+        return self::record($number, $name, $participation, ['min' => $join['min'] ?? 0, 'values' => [] === $set ? null : $values] + $join, $arms);
     }
 
     /**
-     * The shape of each arm, when their join loses what they say: it holds
-     * no value set and no digit fact, while an arm holds one of them.
-     * Arms that read the same count once; past MAX_ARMS, the join stands.
+     * The shape of each arm, when their join loses what they say: the join
+     * holds no value set, and an arm holds one, or the digit fact the join
+     * lacks; or an arm holds a decimal or a letter-case fact the join
+     * lacks. Arms that read the same count once; past MAX_ARMS, the join
+     * stands.
      *
-     * @param list<string>|null $values     the values of the join
-     * @param bool              $digitsOnly the digit fact of the join
-     * @param list<Facts>       $arms
+     * @param Facts       $join what every arm reads together
+     * @param list<Facts> $arms
      *
      * @return list<CaptureGroupShape>
      */
-    private static function arms(int $number, ?string $name, $participation, ?array $values, bool $digitsOnly, array $arms): array
+    private static function arms(int $number, ?string $name, $participation, array $join, array $arms): array
     {
-        if (null !== $values || $digitsOnly) {
+        if (null !== $join['values']) {
             return [];
         }
 
         $shapes = [];
         $telling = false;
         foreach ($arms as $arm) {
-            $telling = $telling || null !== $arm['values'] || $arm['digitsOnly'];
-            $shapes[serialize([$arm['min'], $arm['max'], $arm['values'], $arm['nonFalsy'], $arm['digitsOnly']])] = new CaptureGroupShape($number, $name, $participation, $arm['min'], $arm['max'], $arm['values'], $arm['nonFalsy'], $arm['digitsOnly']);
+            $telling = $telling
+                || (!$join['digitsOnly'] && (null !== $arm['values'] || $arm['digitsOnly']))
+                || ($arm['decimalInt'] && !$join['decimalInt'])
+                || ($arm['lowercase'] && !$join['lowercase'])
+                || ($arm['uppercase'] && !$join['uppercase']);
+            $shapes[serialize($arm)] = self::record($number, $name, $participation, $arm);
         }
 
         return $telling && \count($shapes) > 1 && \count($shapes) <= self::MAX_ARMS ? array_values($shapes) : [];
@@ -790,7 +1098,7 @@ final class CaptureShapeAnalyzer
             if ($never) {
                 // A group no match sets holds no value: its lengths are all it says.
                 [$min, $max] = $this->facts->lengths($node->child);
-                $read = ['min' => $min, 'max' => $max, 'values' => null, 'nonFalsy' => false, 'digitsOnly' => false, 'arms' => []];
+                $read = ['min' => $min, 'max' => $max, 'values' => null, 'nonFalsy' => false, 'digitsOnly' => false, 'decimalInt' => false, 'lowercase' => false, 'uppercase' => false, 'arms' => []];
             } else {
                 $read = $this->facts->of($node->child, true);
                 // each way the group is set: each branch of what it reads, or the group as a whole

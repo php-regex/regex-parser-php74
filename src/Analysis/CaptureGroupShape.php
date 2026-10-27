@@ -74,6 +74,24 @@ final class CaptureGroupShape
     public $digitsOnly = false;
 
     /**
+     * @var bool
+     *
+     */
+    public $decimalInt = false;
+
+    /**
+     * @var bool
+     *
+     */
+    public $lowercase = false;
+
+    /**
+     * @var bool
+     *
+     */
+    public $uppercase = false;
+
+    /**
      * @var list<self>
      *
      */
@@ -85,9 +103,12 @@ final class CaptureGroupShape
      * @param list<string>|null $values     every string the group can hold, or null when they are not a small finite set. An alternation that mixes enumerable and non-enumerable arms - (a|\d) - reads as null: the digits arm holds infinitely many strings, and the scalar facts below carry only what holds for every arm together; $arms keeps each arm
      * @param bool              $nonFalsy   every value is truthy: neither '' nor '0'
      * @param bool              $digitsOnly every value satisfies ctype_digit(): a non-empty run of ASCII 0-9
+     * @param bool              $decimalInt every value satisfies (string) (int) $v === $v, PHPStan's decimal-int-string: '0', or up to 18 digits after an optional '-', the first of them not '0', so no '007', '-0', '+1' or value past PHP_INT_MAX
+     * @param bool              $lowercase  every value satisfies strtolower($v) === $v, PHPStan's lowercase-string: no byte A-Z. strtolower() folds ASCII alone, so 'É' is lowercase too
+     * @param bool              $uppercase  every value satisfies strtoupper($v) === $v, PHPStan's uppercase-string: no byte a-z. strtoupper() folds ASCII alone, so 'é' is uppercase too
      * @param list<self>        $arms       the shape of each way the group is set - each branch of the alternation it reads, each group of a branch reset bearing its number - when their join loses what they say: (a|\d) holds 'a' or digits. Empty when the facts above say it all. An arm bears the number, the name and the participation of the group
      */
-    public function __construct(int $number, ?string $name, $participation, int $minLength, ?int $maxLength, ?array $values, bool $nonFalsy = false, bool $digitsOnly = false, array $arms = [])
+    public function __construct(int $number, ?string $name, $participation, int $minLength, ?int $maxLength, ?array $values, bool $nonFalsy = false, bool $digitsOnly = false, bool $decimalInt = false, bool $lowercase = false, bool $uppercase = false, array $arms = [])
     {
         $this->number = $number;
         $this->name = $name;
@@ -97,6 +118,9 @@ final class CaptureGroupShape
         $this->values = $values;
         $this->nonFalsy = $nonFalsy;
         $this->digitsOnly = $digitsOnly;
+        $this->decimalInt = $decimalInt;
+        $this->lowercase = $lowercase;
+        $this->uppercase = $uppercase;
         $this->arms = $arms;
     }
 }
