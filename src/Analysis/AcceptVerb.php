@@ -31,6 +31,27 @@ use PHPRegex\Parser\Node\SequenceNode;
 final class AcceptVerb
 {
     /**
+     * The groups an "(*ACCEPT)" only ends, not the match.
+     *
+     * @var list<GroupType>|null
+     */
+    private static ?array $ASSERTIONS = null;
+
+    /**
+     * @return list<GroupType>
+     */
+    private static function ASSERTIONS(): array
+    {
+        return self::$ASSERTIONS ??= [
+            GroupType::LookaheadPositive(),
+            GroupType::LookaheadNegative(),
+            GroupType::LookbehindPositive(),
+            GroupType::LookbehindNegative(),
+            GroupType::ScanSubstring(),
+        ];
+    }
+
+    /**
      * Whether a "(*ACCEPT)" inside the node may end the match there: not one
      * in a lookaround, which only ends the assertion, nor in a (DEFINE) or a
      * group a subroutine call runs, which ends only the call.
@@ -38,37 +59,30 @@ final class AcceptVerb
     public static function mayEndMatch(NodeInterface $node): bool
     {
         if ($node instanceof PcreVerbNode) {
-            return 0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT'));
+            return 'ACCEPT' === $node->name;
         }
 
         switch (true) {
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 $children = \in_array($node->type, self::ASSERTIONS(), true) ? [] : [$node->child];
-
                 break;
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 $children = $node->children;
-
                 break;
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 $children = $node->alternatives;
-
                 break;
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 $children = [$node->node];
-
                 break;
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 $children = [$node->yes, $node->no];
-
                 break;
-            case $node instanceof ScriptRunNode:
+            case true === $node instanceof ScriptRunNode:
                 $children = null === $node->content ? [] : [$node->content];
-
                 break;
             default:
                 $children = [];
-
                 break;
         }
 
@@ -79,24 +93,5 @@ final class AcceptVerb
         }
 
         return false;
-    }
-
-    /**
-     * The groups an "(*ACCEPT)" only ends, not the match.
-     */
-    private static function ASSERTIONS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                GroupType::LookaheadPositive(),
-                GroupType::LookaheadNegative(),
-                GroupType::LookbehindPositive(),
-                GroupType::LookbehindNegative(),
-                GroupType::ScanSubstring(),
-            ];
-        }
-
-        return $cache;
     }
 }

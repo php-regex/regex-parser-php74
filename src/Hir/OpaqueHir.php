@@ -25,16 +25,11 @@ use PHPRegex\Parser\Node\NodeInterface;
 final class OpaqueHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $node;
-
+    public NodeInterface $node;
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir|null
      */
-    public $body;
+    public ?Hir $body = null;
 
     public function __construct(
         NodeInterface $node,

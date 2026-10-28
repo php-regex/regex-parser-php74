@@ -34,6 +34,7 @@ use PHPRegex\Parser\Node\LimitMatchNode;
 use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
+use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
@@ -79,6 +80,7 @@ final class AstSerializer
         PcreVerbNode::class,
         PosixClassNode::class,
         QuantifierNode::class,
+        QuantifierBounds::class,
         RangeNode::class,
         ScriptRunNode::class,
         SequenceNode::class,
@@ -97,7 +99,7 @@ final class AstSerializer
         // A class outside the list comes back incomplete, and a node property
         // refuses it: a tree someone altered is a miss, not a failure.
         try {
-            $value = @unserialize($data, ['allowed_classes' => self::NODE_CLASSES]);
+            $value = \PHPRegex\Parser\EnumCases::shared(@unserialize($data, ['allowed_classes' => array_merge(self::NODE_CLASSES, \PHPRegex\Parser\EnumCases::CLASSES)]));
         } catch (\TypeError $exception) {
             return null;
         }

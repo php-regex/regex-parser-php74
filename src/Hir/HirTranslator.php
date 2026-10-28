@@ -35,7 +35,6 @@ use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\QuantifierType;
 use PHPRegex\Parser\Node\RangeNode;
@@ -61,6 +60,7 @@ use PHPRegex\Parser\Syntax\StartOptions;
  */
 final class HirTranslator
 {
+    private bool $unicode = false;
     private const CASELESS = 1;
 
     private const DOT_ALL = 2;
@@ -108,54 +108,39 @@ final class HirTranslator
 
     private const SURROGATE_LAST = 0xDFFF;
 
-    /**
-     * @var bool
-     */
-    private $unicode = false;
+    private bool $unicodeFlag = false;
 
-    /**
-     * @var bool
-     */
-    private $unicodeFlag = false;
+    private bool $dollarEndOnly = false;
 
-    /**
-     * @var bool
-     */
-    private $dollarEndOnly = false;
+    private string $startVerbs = '';
 
-    /**
-     * @var string
-     */
-    private $startVerbs = '';
-
-    /**
-     * @var string
-     */
-    private $source = '';
+    private string $source = '';
 
     /**
      * @var array<int, int> the number of each capturing group, by object id
      */
-    private $groupNumbers = [];
+    private array $groupNumbers = [];
 
     /**
-     * Whether a bare script name, "\p{Han}", means the script alone, as
-     * before PCRE2 10.40, while the running engine reads it as the script
-     * extensions: the sets are then asked with "sc:".
+     * The locale whose character tables the sets without /u are read
+     * under, the target's; the one PHP compiles under when null.
      *
-     *
-     * @var bool
      */
-    private $scriptsAlone;
+    private ?string $locale;
+    /**
+     */
+    private ?PcreTarget $target = null;
 
     /**
-     * @param PcreTarget|null $target the PHP and PCRE2 the pattern is read
-     *                                for; the running engine's reading when
-     *                                null
+     * @param PcreTarget|null $target the PHP, PCRE2 and locale the pattern is
+     *                                read for, its properties spelled as the
+     *                                running engine reads them; the running
+     *                                engine's reading when null
      */
     public function __construct(?PcreTarget $target = null)
     {
-        $this->scriptsAlone = ClassSetProvider::readsScriptsAlone($target);
+        $this->target = $target;
+        $this->locale = ($nullsafeVariable1 = $target) ? $nullsafeVariable1->locale : null;
     }
 
     public function translate(RegexNode $regex): Hir
@@ -189,44 +174,44 @@ final class HirTranslator
     private function node(NodeInterface $node, int $flags): Hir
     {
         switch (true) {
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return $this->sequence($node, $flags);
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return $this->alternation($node, $flags);
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return $this->group($node, $flags);
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return $this->quantifier($node, $flags);
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return $this->literal($node, $flags);
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 return $this->character($node->codePoint, $node, $flags);
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 return $this->charType($node, $flags);
-            case $node instanceof CharClassNode:
-            case $node instanceof DotNode:
-            case $node instanceof UnicodePropNode:
-            case $node instanceof PosixClassNode:
-            case $node instanceof ExtendedCharClassNode:
+            case true === $node instanceof CharClassNode:
+            case true === $node instanceof DotNode:
+            case true === $node instanceof UnicodePropNode:
+            case true === $node instanceof PosixClassNode:
+            case true === $node instanceof ExtendedCharClassNode:
                 return $this->characterClass($node, $flags);
-            case $node instanceof AnchorNode:
-            case $node instanceof AssertionNode:
+            case true === $node instanceof AnchorNode:
+            case true === $node instanceof AssertionNode:
                 return $this->assertion($node, $flags);
-            case $node instanceof KeepNode:
+            case true === $node instanceof KeepNode:
                 return new AssertionHir(AssertionKind::ResetMatchStart(), $node->getStartPosition(), $node->getEndPosition());
-            case $node instanceof CommentNode:
-            case $node instanceof DefineNode:
-            case $node instanceof LimitMatchNode:
+            case true === $node instanceof CommentNode:
+            case true === $node instanceof DefineNode:
+            case true === $node instanceof LimitMatchNode:
                 return new EmptyHir($node->getStartPosition(), $node->getEndPosition());
-            case $node instanceof PcreVerbNode:
+            case true === $node instanceof PcreVerbNode:
                 return $node->getEndPosition() <= \strlen($this->startVerbs)
                     ? new EmptyHir($node->getStartPosition(), $node->getEndPosition())
-                    : new OpaqueHir($node, Properties::zeroWidth(false, 0, 0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT'))), null, $node->getStartPosition(), $node->getEndPosition());
-            case $node instanceof CalloutNode:
-            case $node instanceof VersionConditionNode:
+                    : new OpaqueHir($node, Properties::zeroWidth(false, 0, 'ACCEPT' === $node->name), null, $node->getStartPosition(), $node->getEndPosition());
+            case true === $node instanceof CalloutNode:
+            case true === $node instanceof VersionConditionNode:
                 return $this->opaque($node, Properties::zeroWidth());
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 return new ConditionalHir(
                     $node->condition,
                     $this->node($node->yes, $flags),
@@ -235,7 +220,7 @@ final class HirTranslator
                     $node->getStartPosition(),
                     $node->getEndPosition(),
                 );
-            case $node instanceof ScriptRunNode:
+            case true === $node instanceof ScriptRunNode:
                 return $this->scriptRun($node, $flags);
             default:
                 return $this->opaque($node, Properties::unknown(self::capturesIn($node)));
@@ -274,26 +259,21 @@ final class HirTranslator
         $start = $node->getStartPosition();
         $end = $node->getEndPosition();
 
-        switch ($node->type) {
-            case GroupType::LookaheadPositive():
+        switch (true) {
+            case $node->type === GroupType::LookaheadPositive():
                 $look = LookKind::Ahead();
-
                 break;
-            case GroupType::LookaheadNegative():
+            case $node->type === GroupType::LookaheadNegative():
                 $look = LookKind::NegativeAhead();
-
                 break;
-            case GroupType::LookbehindPositive():
+            case $node->type === GroupType::LookbehindPositive():
                 $look = LookKind::Behind();
-
                 break;
-            case GroupType::LookbehindNegative():
+            case $node->type === GroupType::LookbehindNegative():
                 $look = LookKind::NegativeBehind();
-
                 break;
             default:
                 $look = null;
-
                 break;
         }
         if (null !== $look) {
@@ -301,17 +281,17 @@ final class HirTranslator
             return new LookHir($this->node($node->child, $flags), $look, '*' !== $node->flags, $start, $end);
         }
 
-        switch ($node->type) {
-            case GroupType::Capturing():
-            case GroupType::Named():
+        switch (true) {
+            case $node->type === GroupType::Capturing():
+            case $node->type === GroupType::Named():
                 return new CaptureHir($this->node($node->child, $flags), $this->groupNumbers[spl_object_id($node)] ?? 0, $node->name, $start, $end);
-            case GroupType::Atomic():
+            case $node->type === GroupType::Atomic():
                 return new AtomicHir($this->node($node->child, $flags), $start, $end);
-            case GroupType::InlineFlags():
+            case $node->type === GroupType::InlineFlags():
                 return $this->isBareOptionSetting($node)
                     ? new EmptyHir($start, $end)
                     : $this->node($node->child, $this->applyOptions($flags, $node->flags ?? ''));
-            case GroupType::ScanSubstring():
+            case $node->type === GroupType::ScanSubstring():
                 return $this->opaque($node, Properties::zeroWidth(false, self::capturesIn($node->child)));
             default:
                 return $this->node($node->child, $flags);
@@ -320,7 +300,7 @@ final class HirTranslator
 
     private function quantifier(QuantifierNode $node, int $flags): Hir
     {
-        $bounds = QuantifierBounds::parse($node->quantifier);
+        $bounds = $node->bounds;
         if (null === $bounds) {
             return $this->opaque($node, Properties::unknown(self::capturesIn($node)));
         }
@@ -331,17 +311,14 @@ final class HirTranslator
         }
 
         switch (true) {
-            case QuantifierType::Possessive() === $node->type:
+            case true === (QuantifierType::Possessive() === $node->type):
                 $greed = Greed::Possessive();
-
                 break;
-            case (QuantifierType::Lazy() === $node->type) !== (0 !== ($flags & self::UNGREEDY)):
+            case true === ((QuantifierType::Lazy() === $node->type) !== (0 !== ($flags & self::UNGREEDY))):
                 $greed = Greed::Lazy();
-
                 break;
             default:
                 $greed = Greed::Greedy();
-
                 break;
         }
 
@@ -369,7 +346,8 @@ final class HirTranslator
 
     private function character(int $codePoint, NodeInterface $node, int $flags): Hir
     {
-        if ($codePoint > $this->alphabetEnd()) {
+        // No code point (-1): a "\N{name}" whose name reads as no character.
+        if ($codePoint < 0 || $codePoint > $this->alphabetEnd()) {
             return $this->opaque($node, Properties::unknown());
         }
 
@@ -389,12 +367,12 @@ final class HirTranslator
         $start = $node->getStartPosition();
         $end = $node->getEndPosition();
 
-        switch ($node->value) {
-            case 'R':
+        switch (true) {
+            case 'R' === $node->value:
                 return new AtomicHir(new AlternationHir([new LiteralHir([0x0D, 0x0A], $start, $end), $this->classOf('\\R', $node, $flags)], $start, $end), $start, $end);
-            case 'X':
+            case 'X' === $node->value:
                 return $this->opaque($node, new Properties(1, null, false, CharSet::universe($this->unicode), CharSet::universe($this->unicode), null, [], [], 0, false, false));
-            case 'C':
+            case 'C' === $node->value:
                 return $this->unicode
                     ? $this->opaque($node, new Properties(1, null, false, null, null, null, [], [], 0, false, false))
                     : new ClassHir(CharSet::universe(false), $start, $end);
@@ -443,14 +421,12 @@ final class HirTranslator
             $modifiers .= 'aT';
         }
 
-        if ($this->scriptsAlone) {
-            $atom = ClassSetProvider::scriptsAlone($atom);
-        }
-
-        $set = ClassSetProvider::query($atom, $this->unicode, $modifiers, $this->startVerbs, $this->unicodeFlag);
+        $atom = ClassSetProvider::spelledFor($atom, $this->target);
+        $set = null === $atom ? null : ClassSetProvider::query($atom, $this->unicode, $modifiers, $this->startVerbs, $this->unicodeFlag, $this->locale);
         if (null === $set) {
             // PCRE refused the atom on its own, or gave up scanning it under
-            // its limits: one character, of a set unknown.
+            // its limits, or the running engine has no name for a property
+            // of it as the target reads it: one character, of a set unknown.
             return $this->opaque($node, new Properties(1, 1, false, null, null, null, [], [], 0, false, false));
         }
 
@@ -458,60 +434,48 @@ final class HirTranslator
     }
 
     /**
-     * @param \PHPRegex\Parser\Node\AnchorNode|\PHPRegex\Parser\Node\AssertionNode $node
+     * @param AnchorNode|AssertionNode $node
      */
     private function assertion($node, int $flags): Hir
     {
         $multiline = 0 !== ($flags & self::MULTILINE);
-        switch ($node->value) {
-            case '^':
+        switch (true) {
+            case '^' === $node->value:
                 $kind = $multiline ? AssertionKind::LineStart() : AssertionKind::SubjectStart();
-
                 break;
-            case '$':
+            case '$' === $node->value:
                 switch (true) {
-                    case $multiline:
+                    case true === $multiline:
                         $kind = AssertionKind::LineEnd();
-
                         break;
-                    case $this->dollarEndOnly:
+                    case true === $this->dollarEndOnly:
                         $kind = AssertionKind::SubjectEnd();
-
                         break;
                     default:
                         $kind = AssertionKind::EndOrFinalNewline();
-
                         break;
                 }
-
                 break;
-            case 'A':
+            case 'A' === $node->value:
                 $kind = AssertionKind::SubjectStart();
-
                 break;
-            case 'z':
+            case 'z' === $node->value:
                 $kind = AssertionKind::SubjectEnd();
-
                 break;
-            case 'Z':
+            case 'Z' === $node->value:
                 $kind = AssertionKind::EndOrFinalNewline();
-
                 break;
-            case 'G':
+            case 'G' === $node->value:
                 $kind = AssertionKind::MatchStart();
-
                 break;
-            case 'b':
+            case 'b' === $node->value:
                 $kind = AssertionKind::WordBoundary();
-
                 break;
-            case 'B':
+            case 'B' === $node->value:
                 $kind = AssertionKind::NotWordBoundary();
-
                 break;
             default:
                 $kind = null;
-
                 break;
         }
 
@@ -567,11 +531,12 @@ final class HirTranslator
                 $flat[] = $piece;
             }
         }
+        $matchSubject538 = \count($flat);
 
-        switch (\count($flat)) {
-            case 0:
+        switch (true) {
+            case 0 === $matchSubject538:
                 return new EmptyHir($start, $end);
-            case 1:
+            case 1 === $matchSubject538:
                 return $flat[0];
             default:
                 return new ConcatHir($flat, $start, $end);
@@ -768,7 +733,7 @@ final class HirTranslator
         $on = true;
         $previous = '';
         $length = \strlen($options);
-        for ($index = 0; $index < $length; $index++) {
+        for ($index = 0; $index < $length; ++$index) {
             $letter = $options[$index];
             $bit = 0;
             if ('-' === $letter) {
@@ -780,7 +745,7 @@ final class HirTranslator
                 $next = $options[$index + 1] ?? '';
                 $ascii = self::ASCII_OPTIONS[$next] ?? null;
                 if (null !== $ascii) {
-                    $index++;
+                    ++$index;
                 }
 
                 $bit = $ascii ?? self::ASCII_ALL;

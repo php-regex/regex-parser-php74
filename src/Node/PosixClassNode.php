@@ -21,10 +21,8 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class PosixClassNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $class;
+    public string $class;
 
     public function __construct(
         string $class,

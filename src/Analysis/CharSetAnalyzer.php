@@ -23,10 +23,10 @@ use PHPRegex\Parser\Node\ExtendedCharClassNode;
 use PHPRegex\Parser\Node\GroupNode;
 use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
+use PHPRegex\Parser\Node\ScriptRunNode;
 use PHPRegex\Parser\Node\SequenceNode;
 use PHPRegex\Parser\Syntax\StartOptions;
 use PHPRegex\Parser\Text\Bytes;
@@ -41,22 +41,15 @@ use PHPRegex\Parser\Text\Bytes;
 final class CharSetAnalyzer
 {
     /**
-     * @var string
-     *
      */
-    private $startOptions = '';
+    private bool $unicodeMode;
 
     /**
-     *
-     * @var bool
      */
-    private $unicodeMode;
-
+    private ByteCharSet $dot;
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\ByteCharSet
      */
-    private $dot;
+    private string $startOptions = '';
 
     /**
      * @param string $startOptions the options the pattern opens with, such
@@ -154,6 +147,11 @@ final class CharSetAnalyzer
             return $this->walk($node->child, $fromStart);
         }
 
+        // A script run matches what its body matches, in one script.
+        if ($node instanceof ScriptRunNode) {
+            return null === $node->content ? ByteCharSet::unknown() : $this->walk($node->content, $fromStart);
+        }
+
         if ($node instanceof ExtendedCharClassNode) {
             return $this->walk($node->expression, $fromStart);
         }
@@ -166,12 +164,12 @@ final class CharSetAnalyzer
 
             $left = $this->walk($node->left, $fromStart);
 
-            switch ($node->operator) {
-                case ClassSetOperator::Intersection():
+            switch (true) {
+                case $node->operator === ClassSetOperator::Intersection():
                     return $left->intersect($right);
-                case ClassSetOperator::Difference():
+                case $node->operator === ClassSetOperator::Difference():
                     return $left->intersect($right->complement());
-                case ClassSetOperator::SymmetricDifference():
+                case $node->operator === ClassSetOperator::SymmetricDifference():
                     return $left->union($right)->intersect($left->intersect($right)->complement());
                 default:
                     return $left->union($right);
@@ -212,35 +210,35 @@ final class CharSetAnalyzer
             return ByteCharSet::unknown();
         }
 
-        switch ($type) {
-            case 'd':
+        switch (true) {
+            case 'd' === $type:
                 return ByteCharSet::fromRange(\ord('0'), \ord('9'));
-            case 'D':
+            case 'D' === $type:
                 return ByteCharSet::fromRange(\ord('0'), \ord('9'))->complement();
-            case 'w':
+            case 'w' === $type:
                 return ByteCharSet::fromRange(\ord('0'), \ord('9'))
                     ->union(ByteCharSet::fromRange(\ord('A'), \ord('Z')))
                     ->union(ByteCharSet::fromRange(\ord('a'), \ord('z')))
                     ->union(ByteCharSet::fromChar('_'));
-            case 'W':
+            case 'W' === $type:
                 return ByteCharSet::fromRange(\ord('0'), \ord('9'))
                     ->union(ByteCharSet::fromRange(\ord('A'), \ord('Z')))
                     ->union(ByteCharSet::fromRange(\ord('a'), \ord('z')))
                     ->union(ByteCharSet::fromChar('_'))
                     ->complement();
-            case 's':
+            case 's' === $type:
                 return $this->whitespace();
-            case 'S':
+            case 'S' === $type:
                 return $this->whitespace()->complement();
-            case 'v':
+            case 'v' === $type:
                 return $this->verticalWhitespace();
-            case 'V':
+            case 'V' === $type:
                 return $this->verticalWhitespace()->complement();
-            case 'R':
+            case 'R' === $type:
                 return $this->verticalWhitespace()->union(ByteCharSet::fromChar("\r"));
-            case 'h':
+            case 'h' === $type:
                 return ByteCharSet::fromChar("\t")->union(ByteCharSet::fromChar(' '));
-            case 'H':
+            case 'H' === $type:
                 return ByteCharSet::fromChar("\t")->union(ByteCharSet::fromChar(' '))->complement();
             default:
                 return ByteCharSet::unknown();
@@ -276,30 +274,24 @@ final class CharSetAnalyzer
     private static function dotSet(bool $dotAll, string $newline): ByteCharSet
     {
         switch (true) {
-            case $dotAll:
-            case 'CRLF' === $newline:
+            case true === $dotAll:
+            case true === ('CRLF' === $newline):
                 $newlines = '';
-
                 break;
-            case 'CR' === $newline:
+            case true === ('CR' === $newline):
                 $newlines = "\r";
-
                 break;
-            case 'NUL' === $newline:
+            case true === ('NUL' === $newline):
                 $newlines = "\0";
-
                 break;
-            case 'ANYCRLF' === $newline:
+            case true === ('ANYCRLF' === $newline):
                 $newlines = "\n\r";
-
                 break;
-            case 'ANY' === $newline:
+            case true === ('ANY' === $newline):
                 $newlines = "\n\v\f\r";
-
                 break;
             default:
                 $newlines = "\n";
-
                 break;
         }
 
@@ -330,7 +322,7 @@ final class CharSetAnalyzer
      */
     private function isOptional(QuantifierNode $node): bool
     {
-        return 0 === (($nullsafeVariable1 = QuantifierBounds::parse($node->quantifier)) ? $nullsafeVariable1->min : null);
+        return 0 === (($nullsafeVariable1 = $node->bounds) ? $nullsafeVariable1->min : null);
     }
 
     private function isOptionalNode(NodeInterface $node, bool $fromStart): bool
@@ -345,6 +337,10 @@ final class CharSetAnalyzer
 
         if ($node instanceof GroupNode) {
             return $this->isOptionalNode($node->child, $fromStart);
+        }
+
+        if ($node instanceof ScriptRunNode) {
+            return null !== $node->content && $this->isOptionalNode($node->content, $fromStart);
         }
 
         if ($node instanceof SequenceNode) {

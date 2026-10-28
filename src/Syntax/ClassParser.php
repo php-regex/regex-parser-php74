@@ -29,7 +29,9 @@ use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\SequenceNode;
 use PHPRegex\Parser\Node\UnicodePropNode;
 use PHPRegex\Parser\PcreFeature;
+use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\Token\Token;
+use PHPRegex\Parser\Token\TokenStream;
 use PHPRegex\Parser\Token\TokenType;
 
 /**
@@ -47,39 +49,28 @@ use PHPRegex\Parser\Token\TokenType;
 final class ClassParser
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Syntax\ParseState
      */
-    private $state;
+    private TokenStream $stream;
 
     /**
-     *
-     * @var \PHPRegex\Parser\Token\TokenStream
      */
-    private $stream;
+    private string $pattern;
 
     /**
-     *
-     * @var string
      */
-    private $pattern;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
-     */
-    private $target;
+    private PcreTarget $target;
 
     /**
      * Whether an escape a class refuses once it has read it, as "[\B]",
      * "[\N]" or the "\d" of "[a-\d]", is read as its letter under
      * PCRE2_EXTRA_BAD_ESCAPE_IS_LITERAL, as PCRE2 10.32 reads it: the
-     * negation of PcreFeature::BadEscapeInClassStaysRefused().
+     * negation of PcreFeature::BadEscapeInClassStaysRefused.
      *
-     *
-     * @var bool
      */
-    private $classBadEscapeReadAsLetter;
+    private bool $classBadEscapeReadAsLetter;
+    /**
+     */
+    private ParseState $state;
 
     public function __construct(ParseState $state)
     {
@@ -224,31 +215,21 @@ final class ClassParser
         // Before PCRE2 10.45, a range start is refused on the hyphen, a POSIX
         // class ending a range just inside its "[", and a type or a property
         // ending one past its letter.
-        if (!($this->target->supports(PcreFeature::RangeFromTypeReadToItsEnd()))) {
+        if (!$this->target->supports(PcreFeature::RangeFromTypeReadToItsEnd())) {
             switch (true) {
-                case !$isEnd:
+                case true === !$isEnd:
                     $position = $position - 1;
-
                     break;
-                case $node instanceof PosixClassNode:
+                case true === $node instanceof PosixClassNode:
                     $position = $node->getStartPosition() + 1;
-
                     break;
                 default:
                     $position = $node->getStartPosition() + 2;
-
                     break;
             }
         }
 
-        throw $this->state->error(
-            \sprintf(
-                'Invalid range in character class: a character type, POSIX class, or Unicode property cannot be a range endpoint at position %d.',
-                $position,
-            ),
-            ErrorCode::RangeInvalidBounds(),
-            $position,
-        );
+        throw $this->state->error(\sprintf('Invalid range in character class: a character type, POSIX class, or Unicode property cannot be a range endpoint at position %d.', $position), ErrorCode::RangeInvalidBounds(), $position);
     }
 
     /**
@@ -292,17 +273,13 @@ final class ClassParser
      * Refuses the range an escape that names no character ends, past the
      * escape's letter, as PCRE2 does before 10.45.
      *
-     * @throws ParserException
-     *
      * @return never
+     *
+     * @throws ParserException
      */
     private function throwEscapeEndingRange(int $endAt)
     {
-        throw $this->state->error(
-            \sprintf('Invalid range in character class: "\%s" cannot end a range, at position %d.', $this->pattern[$endAt + 1], $endAt + 2),
-            ErrorCode::RangeInvalidBounds(),
-            $endAt + 2,
-        );
+        throw $this->state->error(\sprintf('Invalid range in character class: "\%s" cannot end a range, at position %d.', $this->pattern[$endAt + 1], $endAt + 2), ErrorCode::RangeInvalidBounds(), $endAt + 2);
     }
 
     /**
@@ -385,15 +362,7 @@ final class ClassParser
             return [new PosixClassNode($token->value, $startPosition, $token->end()), $token->end()];
         }
 
-        throw $this->state->error(
-            \sprintf(
-                'Unexpected token "%s" in character class at position %d.',
-                $this->stream->current()->value,
-                $this->stream->current()->position,
-            ),
-            ErrorCode::TokenUnexpected(),
-            $this->stream->current()->position,
-        );
+        throw $this->state->error(\sprintf('Unexpected token "%s" in character class at position %d.', $this->stream->current()->value, $this->stream->current()->position), ErrorCode::TokenUnexpected(), $this->stream->current()->position);
     }
 
     /**
@@ -602,15 +571,7 @@ final class ClassParser
         try {
             [$endNode] = $this->readAtom($endPosition);
         } catch (ParserException $exception) {
-            throw $this->state->error(
-                \sprintf(
-                    'Unexpected token "%s" in character class range at position %d.',
-                    $this->stream->current()->value,
-                    $this->stream->current()->position,
-                ),
-                ErrorCode::TokenUnexpected(),
-                $this->stream->current()->position,
-            );
+            throw $this->state->error(\sprintf('Unexpected token "%s" in character class range at position %d.', $this->stream->current()->value, $this->stream->current()->position), ErrorCode::TokenUnexpected(), $this->stream->current()->position);
         }
 
         // A class escape after it, once it has read the escape.

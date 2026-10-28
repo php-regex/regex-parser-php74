@@ -26,6 +26,7 @@ use PHPRegex\Parser\Node\ExtendedCharClassNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PosixClassNode;
 use PHPRegex\Parser\Node\RegexNode;
+use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\Token\Token;
 use PHPRegex\Parser\Token\TokenType;
 use PHPRegex\Parser\Validation\Validator;
@@ -41,46 +42,30 @@ use PHPRegex\Parser\Validation\Validator;
 final class ExtendedClassParser
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Syntax\ParseState
      */
-    private $state;
-
+    private string $pattern;
     /**
-     * @var string
-     *
      */
-    private $flags;
-
+    private PcreTarget $target;
     /**
-     * @var int
-     *
      */
-    private $maxRecursionDepth;
-
+    private ParseState $state;
+    /**
+     */
+    private string $flags;
+    /**
+     */
+    private int $maxRecursionDepth;
     /**
      * @var \Closure(list<Token>, bool):NodeInterface
      *
      */
-    private $readPart;
-
+    private \Closure $readPart;
     /**
      * @var \Closure(int, int):void
      *
      */
-    private $nest;
-
-    /**
-     *
-     * @var string
-     */
-    private $pattern;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
-     */
-    private $target;
+    private \Closure $nest;
 
     /**
      * @param string                                     $flags             the modifiers the pattern is read under
@@ -241,18 +226,15 @@ final class ExtendedClassParser
         $tokens = [];
         $quoted = false;
         foreach ($read as $token) {
-            switch ($token->type) {
-                case TokenType::QuoteModeStart():
+            switch (true) {
+                case $token->type === TokenType::QuoteModeStart():
                     $quoted = true;
-
                     break;
-                case TokenType::QuoteModeEnd():
+                case $token->type === TokenType::QuoteModeEnd():
                     $quoted = false;
-
                     break;
                 default:
                     $quoted = $quoted;
-
                     break;
             }
             if ($class && !$quoted && TokenType::Literal() === $token->type && \in_array($token->value, [' ', "\t"], true)) {

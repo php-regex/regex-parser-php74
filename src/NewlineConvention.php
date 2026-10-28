@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser;
 
 /**
- * Cached-instance twin of the NewlineConvention enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The NewlineConvention enum as a class of shared instances: NewlineConvention::Cr() returns
+ * the same instance at each call.
  */
-final class NewlineConvention
+final class NewlineConvention implements BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,56 +25,32 @@ final class NewlineConvention
 
     public static function Cr(): self
     {
-        if (!isset(self::$instances['Cr'])) {
-            self::$instances['Cr'] = new self('Cr', 'CR');
-        }
-
-        return self::$instances['Cr'];
+        return self::$instances['Cr'] ??= new self('Cr', 'CR');
     }
 
     public static function Lf(): self
     {
-        if (!isset(self::$instances['Lf'])) {
-            self::$instances['Lf'] = new self('Lf', 'LF');
-        }
-
-        return self::$instances['Lf'];
+        return self::$instances['Lf'] ??= new self('Lf', 'LF');
     }
 
     public static function CrLf(): self
     {
-        if (!isset(self::$instances['CrLf'])) {
-            self::$instances['CrLf'] = new self('CrLf', 'CRLF');
-        }
-
-        return self::$instances['CrLf'];
+        return self::$instances['CrLf'] ??= new self('CrLf', 'CRLF');
     }
 
     public static function Any(): self
     {
-        if (!isset(self::$instances['Any'])) {
-            self::$instances['Any'] = new self('Any', 'ANY');
-        }
-
-        return self::$instances['Any'];
+        return self::$instances['Any'] ??= new self('Any', 'ANY');
     }
 
     public static function AnyCrLf(): self
     {
-        if (!isset(self::$instances['AnyCrLf'])) {
-            self::$instances['AnyCrLf'] = new self('AnyCrLf', 'ANYCRLF');
-        }
-
-        return self::$instances['AnyCrLf'];
+        return self::$instances['AnyCrLf'] ??= new self('AnyCrLf', 'ANYCRLF');
     }
 
     public static function Nul(): self
     {
-        if (!isset(self::$instances['Nul'])) {
-            self::$instances['Nul'] = new self('Nul', 'NUL');
-        }
-
-        return self::$instances['Nul'];
+        return self::$instances['Nul'] ??= new self('Nul', 'NUL');
     }
 
     /**
@@ -112,13 +70,12 @@ final class NewlineConvention
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\NewlineConvention');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for NewlineConvention.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

@@ -21,34 +21,23 @@ namespace PHPRegex\Parser\Hir;
 final class RepetitionHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $body;
-
+    public Hir $body;
     /**
-     *
-     * @var int
      */
-    public $min;
-
+    public int $min;
     /**
-     *
-     * @var int|null
      */
-    public $max;
-
+    public ?int $max;
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Greed
      */
-    public $greed;
+    public Greed $greed;
 
     public function __construct(
         Hir $body,
         int $min,
         ?int $max,
-        $greed,
+        Greed $greed,
         int $startPosition = 0,
         int $endPosition = 0
     ) {

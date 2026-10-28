@@ -94,7 +94,7 @@ final class PcreTables
      *
      * @var array<int, list<int>>|null
      */
-    private static $caselessSets;
+    private static ?array $caselessSets = null;
 
     /**
      * The caseless set of each character that has one, by that character.

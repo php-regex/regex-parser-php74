@@ -27,45 +27,33 @@ use PHPRegex\Parser\Exception\InvalidRegexOptionException;
 final class CaptureShape
 {
     /**
-     * Mirrors PHPStan's ConstantArrayTypeBuilder::ARRAY_COUNT_LIMIT: past this many value types, nested arrays included, PHPStan generalises a union of array shapes.
      */
-    private const PHPSTAN_ARRAY_COUNT_LIMIT = 256;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\Analysis\CaptureGroupShape
-     */
-    public $whole;
-
+    public CaptureGroupShape $whole;
     /**
      * @var array<int<1, max>, CaptureGroupShape>
      *
      */
-    public $groups;
-
+    public array $groups;
     /**
      * @var list<string>
      *
      */
-    public $marks;
-
+    public array $marks;
     /**
      * @var list<self>
      *
      */
-    public $cases = [];
-
+    public array $cases = [];
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\CaptureGroupShape|null
      */
-    public $scanWhole;
-
+    public ?CaptureGroupShape $scanWhole = null;
     /**
-     * @var CaptureGroupShape|null
-     *
      */
-    public $subject;
+    public ?CaptureGroupShape $subject = null;
+    /**
+     * Mirrors PHPStan's ConstantArrayTypeBuilder::ARRAY_COUNT_LIMIT: past this many value types, nested arrays included, PHPStan generalises a union of array shapes.
+     */
+    private const PHPSTAN_ARRAY_COUNT_LIMIT = 256;
 
     /**
      * @internal built by CaptureShapeAnalyzer::analyze()
@@ -229,24 +217,21 @@ final class CaptureShape
         foreach (CaptureLayout::ofMatch($this, $asNull)->keys as $key) {
             if ($key->holdsMarksOnly()) {
                 $items[] = self::keyName($key).': '.implode('|', $this->markTypes());
-                $values++;
+                ++$values;
 
                 continue;
             }
 
             $types = self::groupTypes($key, $unset);
             switch (true) {
-                case !$key->marks:
+                case true === !$key->marks:
                     $entry = self::entry($types, $key->alwaysSet, $offsets);
-
                     break;
-                case $offsets:
+                case true === $offsets:
                     $entry = self::entry($types, $key->alwaysSet, true).'|'.implode('|', $this->markTypes());
-
                     break;
                 default:
                     $entry = self::entry(array_merge($types, $this->markTypes()), $key->alwaysSet, false);
-
                     break;
             }
             $items[] = self::keyName($key).': '.$entry;
@@ -321,10 +306,10 @@ final class CaptureShape
 
     private static function rank(string $type): int
     {
-        switch ($type) {
-            case "''":
+        switch (true) {
+            case "''" === $type:
                 return 0;
-            case 'null':
+            case 'null' === $type:
                 return 2;
             default:
                 return 1;

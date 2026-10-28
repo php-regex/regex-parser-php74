@@ -21,10 +21,8 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class AnchorNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $value;
+    public string $value;
 
     public function __construct(
         string $value,

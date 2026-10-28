@@ -38,7 +38,6 @@ use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
@@ -70,10 +69,7 @@ final class JsonDumper extends AbstractNodeVisitor
      */
     public const VERSION = 1;
 
-    /**
-     * @var \PHPRegex\Parser\Analysis\GroupIndex|null
-     */
-    private $groups;
+    private ?GroupIndex $groups = null;
 
     /**
      * @return array<string, mixed>
@@ -133,7 +129,7 @@ final class JsonDumper extends AbstractNodeVisitor
     {
         // Null only for a tree built by hand with a quantifier the parser
         // would not read.
-        $bounds = QuantifierBounds::parse($node->quantifier);
+        $bounds = $node->bounds;
 
         return array_merge($this->node('quantifier', $node), ['min' => ($nullsafeVariable3 = $bounds) ? $nullsafeVariable3->min : null, 'max' => ($nullsafeVariable4 = $bounds) ? $nullsafeVariable4->max : null, 'mode' => $node->type->value, 'child' => $node->node->accept($this)]);
     }
@@ -269,7 +265,7 @@ final class JsonDumper extends AbstractNodeVisitor
     #[\Override]
     public function visitScriptRun(ScriptRunNode $node): array
     {
-        return array_merge($this->node('script_run', $node), ['script' => self::text($node->script), 'atomic' => $node->atomic, 'content' => ($nullsafeVariable6 = $node->content) ? $nullsafeVariable6->accept($this) : null]);
+        return array_merge($this->node('script_run', $node), ['script' => self::text($node->script), 'atomic' => $node->isAtomic, 'content' => ($nullsafeVariable6 = $node->content) ? $nullsafeVariable6->accept($this) : null]);
     }
 
     /**
@@ -311,7 +307,7 @@ final class JsonDumper extends AbstractNodeVisitor
     #[\Override]
     public function visitComment(CommentNode $node): array
     {
-        return array_merge($this->node('comment', $node), ['text' => self::text($node->comment), 'extended' => $node->extended]);
+        return array_merge($this->node('comment', $node), ['text' => self::text($node->comment), 'extended' => $node->isExtended]);
     }
 
     /**
@@ -338,7 +334,7 @@ final class JsonDumper extends AbstractNodeVisitor
     #[\Override]
     public function visitPcreVerb(PcreVerbNode $node): array
     {
-        return array_merge($this->node('pcre_verb', $node), ['verb' => self::text($node->verb)]);
+        return array_merge($this->node('pcre_verb', $node), ['verb' => self::text($node->verb), 'name' => self::text($node->name), 'argument' => null === $node->argument ? null : self::text($node->argument)]);
     }
 
     /**

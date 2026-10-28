@@ -18,4 +18,6 @@ namespace PHPRegex\Parser\Exception;
  *
  * @see \PHPRegex\Parser\Syntax\TokenParser
  */
-final class RecursionLimitException extends LimitException implements ExceptionInterface {}
+final class RecursionLimitException extends LimitException implements ExceptionInterface
+{
+}

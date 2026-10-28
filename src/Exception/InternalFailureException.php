@@ -32,10 +32,8 @@ namespace PHPRegex\Parser\Exception;
 final class InternalFailureException extends \RuntimeException implements ExceptionInterface
 {
     /**
-     * @var int
-     *
      */
-    public $pcreError;
+    public int $pcreError;
 
     /**
      * @param int $pcreError the preg_last_error() code of a regex that gave
@@ -55,22 +53,18 @@ final class InternalFailureException extends \RuntimeException implements Except
      */
     public static function pcreGaveUp(int $pcreError): self
     {
-        switch ($pcreError) {
-            case \PREG_BACKTRACK_LIMIT_ERROR:
+        switch (true) {
+            case \PREG_BACKTRACK_LIMIT_ERROR === $pcreError:
                 $reason = 'the backtrack limit (pcre.backtrack_limit) was exhausted';
-
                 break;
-            case \PREG_RECURSION_LIMIT_ERROR:
+            case \PREG_RECURSION_LIMIT_ERROR === $pcreError:
                 $reason = 'the recursion limit (pcre.recursion_limit) was exhausted';
-
                 break;
-            case \PREG_JIT_STACKLIMIT_ERROR:
+            case \PREG_JIT_STACKLIMIT_ERROR === $pcreError:
                 $reason = 'the JIT stack limit was exhausted';
-
                 break;
             default:
                 $reason = \sprintf('PCRE error %d', $pcreError);
-
                 break;
         }
 

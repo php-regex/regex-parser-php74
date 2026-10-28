@@ -26,76 +26,45 @@ namespace PHPRegex\Parser\Analysis;
 final class CaptureGroupShape
 {
     /**
-     *
-     * @var int
      */
-    public $number;
-
+    public int $number;
     /**
-     *
-     * @var string|null
      */
-    public $name;
-
+    public ?string $name;
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\Participation
      */
-    public $participation;
-
+    public Participation $participation;
     /**
-     *
-     * @var int
      */
-    public $minLength;
-
+    public int $minLength;
     /**
-     *
-     * @var int|null
      */
-    public $maxLength;
-
+    public ?int $maxLength;
     /**
      * @var list<string>|null
      *
      */
-    public $values;
-
+    public ?array $values;
     /**
-     * @var bool
-     *
      */
-    public $nonFalsy = false;
-
+    public bool $nonFalsy = false;
     /**
-     * @var bool
-     *
      */
-    public $digitsOnly = false;
-
+    public bool $digitsOnly = false;
     /**
-     * @var bool
-     *
      */
-    public $decimalInt = false;
-
+    public bool $decimalInt = false;
     /**
-     * @var bool
-     *
      */
-    public $lowercase = false;
-
+    public bool $lowercase = false;
     /**
-     * @var bool
-     *
      */
-    public $uppercase = false;
-
+    public bool $uppercase = false;
     /**
      * @var list<self>
      *
      */
-    public $arms = [];
+    public array $arms = [];
 
     /**
      * @internal built by CaptureShapeAnalyzer::analyze(), for CaptureShape::$whole and CaptureShape::$groups
@@ -108,7 +77,7 @@ final class CaptureGroupShape
      * @param bool              $uppercase  every value satisfies strtoupper($v) === $v, PHPStan's uppercase-string: no byte a-z. strtoupper() folds ASCII alone, so 'é' is uppercase too
      * @param list<self>        $arms       the shape of each way the group is set - each branch of the alternation it reads, each group of a branch reset bearing its number - when their join loses what they say: (a|\d) holds 'a' or digits. Empty when the facts above say it all. An arm bears the number, the name and the participation of the group
      */
-    public function __construct(int $number, ?string $name, $participation, int $minLength, ?int $maxLength, ?array $values, bool $nonFalsy = false, bool $digitsOnly = false, bool $decimalInt = false, bool $lowercase = false, bool $uppercase = false, array $arms = [])
+    public function __construct(int $number, ?string $name, Participation $participation, int $minLength, ?int $maxLength, ?array $values, bool $nonFalsy = false, bool $digitsOnly = false, bool $decimalInt = false, bool $lowercase = false, bool $uppercase = false, array $arms = [])
     {
         $this->number = $number;
         $this->name = $name;

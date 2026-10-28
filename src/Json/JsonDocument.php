@@ -105,7 +105,7 @@ final class JsonDocument
             }
 
             $spelled .= \sprintf('\\x%02X', \ord($text[$i]));
-            $i++;
+            ++$i;
         }
 
         return $spelled;
@@ -125,6 +125,11 @@ final class JsonDocument
         return $value;
     }
 
+    /**
+     * @param mixed $value
+     *
+     * @return mixed
+     */
     private static function escapeValue($value)
     {
         if (\is_string($value)) {
@@ -139,7 +144,7 @@ final class JsonDocument
             return self::escapeValue($value->jsonSerialize());
         }
 
-        if ($value instanceof \BackedEnum) {
+        if ($value instanceof \PHPRegex\Parser\BackedEnum) {
             return self::escapeValue($value->value);
         }
 

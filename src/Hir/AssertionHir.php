@@ -21,22 +21,17 @@ namespace PHPRegex\Parser\Hir;
 final class AssertionHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\AssertionKind
      */
-    public $kind;
-
+    public AssertionKind $kind;
     /**
-     * @var CharSet|null
-     *
      */
-    public $wordSet;
+    public ?CharSet $wordSet = null;
 
     /**
      * @param CharSet|null $wordSet for a word boundary, the characters the engine reads as \w here
      */
     public function __construct(
-        $kind,
+        AssertionKind $kind,
         int $startPosition = 0,
         int $endPosition = 0,
         ?CharSet $wordSet = null

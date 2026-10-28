@@ -21,16 +21,11 @@ use PHPRegex\Parser\PcreTarget;
 final class TargetVerdict
 {
     /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
      */
-    public $target;
-
+    public PcreTarget $target;
     /**
-     *
-     * @var \PHPRegex\Parser\Validation\ValidationResult
      */
-    public $validation;
+    public ValidationResult $validation;
 
     /**
      * @internal built by CompatibilityChecker::check() and RangeDiff::diff()

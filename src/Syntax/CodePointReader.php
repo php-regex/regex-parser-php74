@@ -35,16 +35,18 @@ final class CodePointReader
 {
     public const UNKNOWN = -1;
 
-    public static function fromLiteral(string $representation, $type): int
+    public static function fromLiteral(string $representation, CharLiteralType $type): int
     {
-        switch ($type) {
-            case CharLiteralType::Unicode():
+        switch (true) {
+            case $type === CharLiteralType::Unicode():
                 return self::fromHexEscape($representation);
-            case CharLiteralType::UnicodeNamed():
+            case $type === CharLiteralType::UnicodeNamed():
                 return self::fromNamedEscape($representation);
-            case CharLiteralType::Octal():
-            case CharLiteralType::OctalLegacy():
+            case $type === CharLiteralType::Octal():
+            case $type === CharLiteralType::OctalLegacy():
                 return self::fromOctalEscape($representation);
+            default:
+                throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($type));
         }
     }
 

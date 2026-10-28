@@ -18,4 +18,6 @@ namespace PHPRegex\Parser\Exception;
  *
  * @see \PHPRegex\Parser\Syntax\TokenParser
  */
-final class SyntaxErrorException extends ParserException implements ExceptionInterface {}
+final class SyntaxErrorException extends ParserException implements ExceptionInterface
+{
+}

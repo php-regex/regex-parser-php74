@@ -17,6 +17,7 @@ use PHPRegex\Parser\Engine\LibraryPcre;
 use PHPRegex\Parser\PcreFeature;
 use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\Text\Ascii;
+use PHPRegex\Parser\Text\Utf8;
 
 /**
  * The condition "(?(VERSION>=10.4)yes|no)" asks about.
@@ -30,6 +31,12 @@ use PHPRegex\Parser\Text\Ascii;
 final class VersionCondition
 {
     /**
+     */
+    public string $operator;
+    /**
+     */
+    public string $version;
+    /**
      * The comparisons that may follow "VERSION", longest first so that ">="
      * is not read as ">".
      *
@@ -38,22 +45,30 @@ final class VersionCondition
      */
     private const OPERATORS = ['>=', '<=', '==', '!=', '>', '<', '='];
 
-    /**
-     *
-     * @var string
-     */
-    public $operator;
-
-    /**
-     *
-     * @var string
-     */
-    public $version;
-
     private function __construct(string $operator, string $version)
     {
         $this->operator = $operator;
         $this->version = $version;
+    }
+
+    /**
+     * Whether "(?(VERSION>=10.4)" holds on the target's release: before
+     * PCRE2 10.47 a one-digit minor reads as tens, "10.4" as 10.40, and
+     * from 10.47 as written, 10.04. Null for a comparison PCRE does not
+     * take, or a version it does not read.
+     */
+    public static function holdsOn(string $operator, string $version, PcreTarget $target): ?bool
+    {
+        if (('>=' !== $operator && '=' !== $operator) || !self::isVersionNumber($version) || substr_count($version, '.') > 1) {
+            return null;
+        }
+
+        [$major, $minor] = explode('.', $version, 2) + [1 => '0'];
+        $tens = 1 === \strlen($minor) && !$target->supports(PcreFeature::VersionConditionWholeNumbers()) ? 10 : 1;
+        [$releaseMajor, $releaseMinor] = array_map(\Closure::fromCallable('intval'), explode('.', $target->pcreVersion, 2));
+        $order = [$releaseMajor, $releaseMinor] <=> [(int) $major, (int) $minor * $tens];
+
+        return '=' === $operator ? 0 === $order : $order >= 0;
     }
 
     /**
@@ -94,7 +109,62 @@ final class VersionCondition
      */
     public static function errorOffsetFor(string $pattern, int $position, PcreTarget $target, bool $utf = false): ?int
     {
-        return self::errorOffsetReading($pattern, $position, !$target->supports(PcreFeature::VersionConditionWholeNumbers()), $target->supports(PcreFeature::ErrorOffsetPastTheFault()), $utf);
+        $twoDigitMinor = !$target->supports(PcreFeature::VersionConditionWholeNumbers());
+        $length = \strlen($pattern);
+        if ($length - $position < 10 || 'VERSION' !== substr($pattern, $position, 7)) {
+            return null;
+        }
+
+        if (')' === $pattern[$position + 7]) {
+            return null;
+        }
+
+        $at = $position + 7;
+        $atLeast = '>' === $pattern[$at];
+        if ($atLeast) {
+            ++$at;
+        }
+
+        if ('=' !== ($pattern[$at] ?? '')) {
+            return $atLeast ? $at : self::faultAt($pattern, $at, $target, $utf);
+        }
+
+        ++$at;
+        if (!Ascii::isDigit($pattern[$at] ?? '')) {
+            return $atLeast ? $at : self::faultAt($pattern, $at, $target, $utf);
+        }
+
+        [$at, $tooBig] = $twoDigitMinor ? self::readVersionPartDigitByDigit($pattern, $at) : self::readVersionPart($pattern, $at);
+        if ($tooBig) {
+            return $at;
+        }
+
+        if ('.' === ($pattern[$at] ?? '')) {
+            ++$at;
+            if (!Ascii::isDigit($pattern[$at] ?? '')) {
+                return $at < $length ? self::faultAt($pattern, $at, $target, $utf) : $at;
+            }
+
+            // Up to PCRE2 10.45 the minor is two digits, and a third one is
+            // where PCRE stops.
+            if ($twoDigitMinor) {
+                $at += strspn($pattern, '0123456789', $at, 2);
+                if (Ascii::isDigit($pattern[$at] ?? '')) {
+                    return $at;
+                }
+            } else {
+                [$at, $tooBig] = self::readVersionPart($pattern, $at);
+                if ($tooBig) {
+                    return $at;
+                }
+            }
+        }
+
+        if (')' !== ($pattern[$at] ?? '')) {
+            return $at < $length ? self::faultAt($pattern, $at, $target, $utf) : $at;
+        }
+
+        return null;
     }
 
     /**
@@ -114,84 +184,14 @@ final class VersionCondition
     }
 
     /**
-     * errorOffsetFor() with what the target decides spelled out: whether the
-     * minor is two digits ($twoDigitMinor), whether PCRE reports past the
-     * character it stops on ($pastTheFault).
+     * Where PCRE reports the character at $position it stops on: past it
+     * from PCRE2 10.47, past the whole character under $utf; on it before.
      */
-    private static function errorOffsetReading(string $pattern, int $position, bool $twoDigitMinor, bool $pastTheFault, bool $utf): ?int
+    private static function faultAt(string $pattern, int $position, PcreTarget $target, bool $utf): int
     {
-        $length = \strlen($pattern);
-        if ($length - $position < 10 || 'VERSION' !== substr($pattern, $position, 7)) {
-            return null;
-        }
+        $width = $utf ? Utf8::width($pattern, $position) : 1;
 
-        if (')' === $pattern[$position + 7]) {
-            return null;
-        }
-
-        $at = $position + 7;
-        $atLeast = '>' === $pattern[$at];
-        if ($atLeast) {
-            $at++;
-        }
-
-        if ('=' !== ($pattern[$at] ?? '')) {
-            return $atLeast ? $at : $at + self::stepPast($pattern, $at, $pastTheFault, $utf);
-        }
-
-        $at++;
-        if (!Ascii::isDigit($pattern[$at] ?? '')) {
-            return $atLeast ? $at : $at + self::stepPast($pattern, $at, $pastTheFault, $utf);
-        }
-
-        [$at, $tooBig] = $twoDigitMinor ? self::readVersionPartDigitByDigit($pattern, $at) : self::readVersionPart($pattern, $at);
-        if ($tooBig) {
-            return $at;
-        }
-
-        if ('.' === ($pattern[$at] ?? '')) {
-            $at++;
-            if (!Ascii::isDigit($pattern[$at] ?? '')) {
-                return $at < $length ? $at + self::stepPast($pattern, $at, $pastTheFault, $utf) : $at;
-            }
-
-            // Up to PCRE2 10.45 the minor is two digits, and a third one is
-            // where PCRE stops.
-            if ($twoDigitMinor) {
-                $at += strspn($pattern, '0123456789', $at, 2);
-                if (Ascii::isDigit($pattern[$at] ?? '')) {
-                    return $at;
-                }
-            } else {
-                [$at, $tooBig] = self::readVersionPart($pattern, $at);
-                if ($tooBig) {
-                    return $at;
-                }
-            }
-        }
-
-        if (')' !== ($pattern[$at] ?? '')) {
-            return $at < $length ? $at + self::stepPast($pattern, $at, $pastTheFault, $utf) : $at;
-        }
-
-        return null;
-    }
-
-    /**
-     * How far past the character at $position PCRE reports an error it
-     * reports past the fault: one byte, or the whole character under $utf.
-     */
-    private static function stepPast(string $pattern, int $position, bool $pastTheFault, bool $utf): int
-    {
-        if (!$pastTheFault) {
-            return 0;
-        }
-
-        if ($utf && 1 === LibraryPcre::match('/\G./su', $pattern, $matches, 0, $position)) {
-            return \strlen($matches[0]);
-        }
-
-        return 1;
+        return $target->faultOffset($position + $width, $width);
     }
 
     /**

@@ -66,17 +66,14 @@ use PHPRegex\Parser\Syntax\StartOptions;
 final class PatternInfoAnalyzer
 {
     /**
+     */
+    private ?PcreTarget $target = null;
+    /**
      * Rises when a sound bound narrows, or when a fact changes for the same
      * pattern: the same pattern may then get a tighter length range, a
      * proven anchor it did not have, or another longest lookbehind.
      */
     public const ANALYSIS_VERSION = '2';
-
-    /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget|null
-     */
-    private $target;
 
     public function __construct(?PcreTarget $target = null)
     {
@@ -103,7 +100,7 @@ final class PatternInfoAnalyzer
         if (!$validation->isValid) {
             [$pattern] = PatternParser::extractPatternAndFlags($regex, $parser->target());
 
-            throw new SemanticErrorException((string) $validation->error, $validation->errorCode ?? ErrorCode::InternalUnexpectedState(), $validation->offset, $pattern, null, $validation->hint);
+            throw new SemanticErrorException((string) $validation->error, $validation->errorCode ?? ErrorCode::InternalUnexpectedState(), $validation->offset, $pattern, null, null, $validation->hint);
         }
 
         return (new self($parser->target()))->analyze($ast);
@@ -190,7 +187,7 @@ final class PatternInfoAnalyzer
 
         $max = 0;
         $measured = [];
-        for ($next = 0; $next < \count($waiting); $next++) {
+        for ($next = 0; $next < \count($waiting); ++$next) {
             $lookbehind = $waiting[$next];
             $id = spl_object_id($lookbehind);
             if (isset($measured[$id])) {
@@ -254,7 +251,7 @@ final class PatternInfoAnalyzer
             $facts['backslashC'] = true;
         } elseif ($node instanceof KeepNode) {
             $facts['keep'] = true;
-        } elseif ($node instanceof PcreVerbNode && ('SKIP' === $node->verb || 0 === strncmp($node->verb, 'SKIP:', strlen('SKIP:')))) {
+        } elseif ($node instanceof PcreVerbNode && 'SKIP' === $node->name) {
             $facts['skip'] = true;
         } elseif (self::isLookbehind($node) && !$inLookbehind) {
             // A lookbehind inside another is measured, or not, with it.
@@ -293,28 +290,23 @@ final class PatternInfoAnalyzer
         [$match, $depth, $heap, $newline, $bsr] = [null, null, null, null, null];
         foreach (StartOptions::items($source) as $option) {
             [$name, $value] = explode('=', $option, 2) + [1 => ''];
-            switch ($name) {
-                case 'LIMIT_MATCH':
+            switch (true) {
+                case 'LIMIT_MATCH' === $name:
                     $match = (int) $value;
-
                     break;
-                case 'LIMIT_DEPTH':
-                case 'LIMIT_RECURSION':
+                case 'LIMIT_DEPTH' === $name:
+                case 'LIMIT_RECURSION' === $name:
                     $depth = (int) $value;
-
                     break;
-                case 'LIMIT_HEAP':
+                case 'LIMIT_HEAP' === $name:
                     $heap = (int) $value;
-
                     break;
-                case 'BSR_ANYCRLF':
-                case 'BSR_UNICODE':
+                case 'BSR_ANYCRLF' === $name:
+                case 'BSR_UNICODE' === $name:
                     $bsr = BsrConvention::from(substr($name, 4));
-
                     break;
                 default:
                     $newline = NewlineConvention::tryFrom($name) ?? $newline;
-
                     break;
             }
         }
@@ -335,17 +327,17 @@ final class PatternInfoAnalyzer
     private static function startsAnchored(Hir $hir, \Closure $groupBefore): bool
     {
         switch (true) {
-            case $hir instanceof AssertionHir:
+            case true === $hir instanceof AssertionHir:
                 return (AssertionKind::SubjectStart() === $hir->kind || AssertionKind::MatchStart() === $hir->kind)
                     && !$groupBefore($hir->startPosition);
-            case $hir instanceof ConcatHir:
+            case true === $hir instanceof ConcatHir:
                 return self::startsAnchored($hir->parts[0], $groupBefore);
-            case $hir instanceof AlternationHir:
+            case true === $hir instanceof AlternationHir:
                 return self::allAnchored($hir->branches, static fn (Hir $branch): bool => self::startsAnchored($branch, $groupBefore));
-            case $hir instanceof CaptureHir:
-            case $hir instanceof AtomicHir:
+            case true === $hir instanceof CaptureHir:
+            case true === $hir instanceof AtomicHir:
                 return self::startsAnchored($hir->body, $groupBefore);
-            case $hir instanceof RepetitionHir:
+            case true === $hir instanceof RepetitionHir:
                 return $hir->min > 0 && self::startsAnchored($hir->body, $groupBefore);
             default:
                 return false;
@@ -395,16 +387,16 @@ final class PatternInfoAnalyzer
     private static function endsAnchored(Hir $hir): bool
     {
         switch (true) {
-            case $hir instanceof AssertionHir:
+            case true === $hir instanceof AssertionHir:
                 return AssertionKind::SubjectEnd() === $hir->kind;
-            case $hir instanceof ConcatHir:
+            case true === $hir instanceof ConcatHir:
                 return self::endsAnchored($hir->parts[\count($hir->parts) - 1]);
-            case $hir instanceof AlternationHir:
+            case true === $hir instanceof AlternationHir:
                 return self::allAnchored($hir->branches, \Closure::fromCallable([self::class, 'endsAnchored']));
-            case $hir instanceof CaptureHir:
-            case $hir instanceof AtomicHir:
+            case true === $hir instanceof CaptureHir:
+            case true === $hir instanceof AtomicHir:
                 return self::endsAnchored($hir->body);
-            case $hir instanceof RepetitionHir:
+            case true === $hir instanceof RepetitionHir:
                 return $hir->min > 0 && self::endsAnchored($hir->body);
             default:
                 return false;

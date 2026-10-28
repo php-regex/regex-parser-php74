@@ -21,16 +21,11 @@ namespace PHPRegex\Parser\Engine;
 final class PcreError
 {
     /**
-     * @var string
-     *
      */
-    public $message;
-
+    public string $message;
     /**
-     * @var int|null
-     *
      */
-    public $offset;
+    public ?int $offset = null;
 
     /**
      * @internal built by PcreEngine::compile()

@@ -48,7 +48,7 @@ final class BadEscape
     /**
      * The largest number the digits after a backslash may make.
      */
-    private const MAX_BACKSLASH_NUMBER = 214748363;
+    private const MAX_BACKSLASH_NUMBER = 214_748_363;
 
     /**
      * The characters a group name may hold, past which PCRE2 refuses it.
@@ -116,23 +116,23 @@ final class BadEscape
             return self::refusedInClass($pattern, $letter, $after, $utf, $pcre2Ten32, $rangeStarted);
         }
 
-        switch ($letter) {
-            case 'N':
+        switch (true) {
+            case 'N' === $letter:
                 return self::namedCharacterFails($pattern, $after, $utf);
-            case 'p':
-            case 'P':
+            case 'p' === $letter:
+            case 'P' === $letter:
                 return !self::readsProperty($pattern, $after, $target);
-            case 'k':
+            case 'k' === $letter:
                 return self::namedReferenceFails($pattern, $after, $utf && !$pcre2Ten32 ? $target : null);
-            case 'g':
+            case 'g' === $letter:
                 return !$inClass && self::gReferenceFails($pattern, $after, $utf && !$pcre2Ten32 ? $target : null, $captures);
-            case 'o':
+            case 'o' === $letter:
                 return self::octalBracesFail($pattern, $after, $utf);
-            case 'x':
+            case 'x' === $letter:
                 return '{' === ($pattern[$after] ?? '') && self::hexBracesFail($pattern, $after + 1, $utf);
-            case 'c':
+            case 'c' === $letter:
                 return self::controlFails($pattern, $after);
-            case '0':
+            case '0' === $letter:
                 return false;
             default:
                 return Ascii::isDigit($letter) && self::digitsFail($pattern, $at + 1, $inClass, $utf, $captures);
@@ -208,7 +208,7 @@ final class BadEscape
             return false;
         }
 
-        $at++;
+        ++$at;
         if ('}' === ($pattern[$at] ?? '')) {
             return true;
         }
@@ -233,7 +233,7 @@ final class BadEscape
         $value = 0;
         while (Ascii::isDigit($pattern[$at] ?? '')) {
             $value = $value * 10 + (int) $pattern[$at];
-            $at++;
+            ++$at;
             if ($value > $max) {
                 return [false, $at];
             }
@@ -256,7 +256,7 @@ final class BadEscape
 
         $at = $after + 1;
         if ('^' === ($pattern[$at] ?? '')) {
-            $at++;
+            ++$at;
         }
 
         $close = strpos($pattern, '}', $at);
@@ -404,7 +404,7 @@ final class BadEscape
             if ($value > ($utf ? 0x10FFFF : 0xFF)) {
                 return true;
             }
-            $at++;
+            ++$at;
         }
 
         return '}' !== ($pattern[$at] ?? '') || ($utf && $value >= 0xD800 && $value <= 0xDFFF);
@@ -426,7 +426,7 @@ final class BadEscape
             if ($value > ($utf ? 0x10FFFF : 0xFF)) {
                 return true;
             }
-            $at++;
+            ++$at;
         }
 
         return '}' !== ($pattern[$at] ?? '') || ($utf && $value >= 0xD800 && $value <= 0xDFFF);

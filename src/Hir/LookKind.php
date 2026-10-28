@@ -2,79 +2,42 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Hir;
 
 /**
- * Cached-instance twin of the LookKind enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The LookKind enum as a class of shared instances: LookKind::Ahead() returns
+ * the same instance at each call.
  */
-final class LookKind
+final class LookKind implements \PHPRegex\Parser\UnitEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
-
-    private function __construct(string $name, string $value)
+    private function __construct(string $name)
     {
         $this->name = $name;
-        $this->value = $value;
     }
 
     public static function Ahead(): self
     {
-        if (!isset(self::$instances['Ahead'])) {
-            self::$instances['Ahead'] = new self('Ahead', 'Ahead');
-        }
-
-        return self::$instances['Ahead'];
+        return self::$instances['Ahead'] ??= new self('Ahead');
     }
 
     public static function NegativeAhead(): self
     {
-        if (!isset(self::$instances['NegativeAhead'])) {
-            self::$instances['NegativeAhead'] = new self('NegativeAhead', 'NegativeAhead');
-        }
-
-        return self::$instances['NegativeAhead'];
+        return self::$instances['NegativeAhead'] ??= new self('NegativeAhead');
     }
 
     public static function Behind(): self
     {
-        if (!isset(self::$instances['Behind'])) {
-            self::$instances['Behind'] = new self('Behind', 'Behind');
-        }
-
-        return self::$instances['Behind'];
+        return self::$instances['Behind'] ??= new self('Behind');
     }
 
     public static function NegativeBehind(): self
     {
-        if (!isset(self::$instances['NegativeBehind'])) {
-            self::$instances['NegativeBehind'] = new self('NegativeBehind', 'NegativeBehind');
-        }
-
-        return self::$instances['NegativeBehind'];
+        return self::$instances['NegativeBehind'] ??= new self('NegativeBehind');
     }
 
     /**

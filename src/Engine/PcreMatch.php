@@ -19,28 +19,19 @@ namespace PHPRegex\Parser\Engine;
 final class PcreMatch
 {
     /**
-     * @var bool|null
-     *
      */
-    public $matched;
-
+    public ?bool $matched;
     /**
      * @var array<int|string, string|array{string|null, int}|null>
      *
      */
-    public $groups = [];
-
+    public array $groups = [];
     /**
-     * @var string|null
-     *
      */
-    public $error;
-
+    public ?string $error = null;
     /**
-     * @var int
-     *
      */
-    public $errorCode = \PREG_NO_ERROR;
+    public int $errorCode = \PREG_NO_ERROR;
 
     /**
      * @internal built by PcreEngine::match() and PcreEngine::test()

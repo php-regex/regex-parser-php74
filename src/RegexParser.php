@@ -61,6 +61,34 @@ use PHPRegex\Parser\Validation\Validator;
 final class RegexParser
 {
     /**
+     * The trees a persistent cache gave or took in this process.
+     *
+     */
+    private ?ArrayCache $front;
+    /**
+     * What validate() answered, by pattern: a result depends only on the
+     * pattern and on this parser's options and target, all fixed. The
+     * least recently read goes first past MAX_KEPT_RESULTS.
+     *
+     * @var array<string, ValidationResult>
+     */
+    private array $results = [];
+    /**
+     */
+    private int $maxPatternLength;
+    /**
+     */
+    private int $maxLookbehindLength;
+    /**
+     */
+    private CacheInterface $cache;
+    /**
+     */
+    private bool $runtimePcreValidation;
+    /**
+     */
+    private int $maxRecursionDepth;
+    /**
      * Cache version for AST serialization, and part of the key of a
      * persistent DFA cache.
      *
@@ -73,7 +101,7 @@ final class RegexParser
      * "task cache-version" writes it, "task lint" runs that, and the test
      * suite fails while the constant and the code disagree.
      */
-    public const CACHE_VERSION = 'ast-cee9f0e6f2f801ca372e359384d2c21c';
+    public const CACHE_VERSION = 'ast-8ca28abe0f3d5f394edc4dd3a0fa1be2';
 
     /**
      * ParserOptions::DEFAULT_MAX_PATTERN_LENGTH, by the name the parser gave it first.
@@ -106,63 +134,12 @@ final class RegexParser
     private const TARGET_PREFIX = '#target=';
 
     /**
-     * @var int
-     *
      */
-    private $maxPatternLength;
+    private PcreTarget $target;
 
     /**
-     * @var int
-     *
      */
-    private $maxLookbehindLength;
-
-    /**
-     * @var CacheInterface
-     *
-     */
-    private $cache;
-
-    /**
-     * @var bool
-     *
-     */
-    private $runtimePcreValidation;
-
-    /**
-     * @var int
-     *
-     */
-    private $maxRecursionDepth;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
-    /**
-     * @var PcreEngine
-     *
-     */
-    private $engine;
-
-    /**
-     * The trees a persistent cache gave or took in this process.
-     *
-     *
-     * @var \PHPRegex\Parser\Cache\ArrayCache|null
-     */
-    private $front;
-
-    /**
-     * What validate() answered, by pattern: a result depends only on the
-     * pattern and on this parser's options and target, all fixed. The
-     * least recently read goes first past MAX_KEPT_RESULTS.
-     *
-     * @var array<string, ValidationResult>
-     */
-    private $results = [];
+    private PcreEngine $engine;
 
     /**
      * @param int            $maxPatternLength      Maximum allowed pattern length
@@ -268,9 +245,9 @@ final class RegexParser
      *
      * @param string $regex the regular expression to validate
      *
-     * @throws InternalFailureException when the library cannot finish its own work
-     *
      * @return ValidationResult Detailed validation result
+     *
+     * @throws InternalFailureException when the library cannot finish its own work
      */
     public function validate(string $regex): ValidationResult
     {
@@ -372,7 +349,10 @@ final class RegexParser
     {
         $stats = $this->cache instanceof RemovableCacheInterface ? $this->cache->getStats() : ['hits' => 0, 'misses' => 0];
         if (null !== $this->front) {
-            // A tree found in memory never reached the persistent cache.
+            // A tree found in memory never reached the persistent cache: its
+            // hit is counted here. A miss in memory went on to the persistent
+            // cache, which counted it as its own hit or miss: adding it here
+            // would count that read twice.
             $stats['hits'] += $this->front->getStats()['hits'];
         }
 
@@ -462,7 +442,7 @@ final class RegexParser
                 }
             }
 
-            return new ValidationResult(true, null, $complexityScore);
+            return new ValidationResult(true, null, $complexityScore, null, null, null, null, null, $ast);
         } catch (LimitException $e) {
             // The library's own limits: the pattern is not read further,
             // and no verdict is given on it.
@@ -485,7 +465,7 @@ final class RegexParser
      * $error: one earlier in the pattern, or $error itself. A judgement the
      * parser had to pass on as a parse error keeps its code.
      *
-     * @param \PHPRegex\Parser\Exception\LexerException|\PHPRegex\Parser\Exception\ParserException $error
+     * @param LexerException|ParserException $error
      */
     private function firstParseError(string $regex, $error): RegexException
     {
@@ -799,14 +779,7 @@ final class RegexParser
             $bodyStart = \strlen($regex) - \strlen($trimmed) + 1;
             $offset = max(0, $this->maxPatternLength - $bodyStart);
 
-            throw ResourceLimitException::withContext(
-                \sprintf('Regex pattern exceeds maximum length of %d characters.', $this->maxPatternLength),
-                ErrorCode::PatternTooLong(),
-                $offset,
-                $trimmed,
-                null,
-                $offset + 1,
-            );
+            throw ResourceLimitException::withContext(\sprintf('Regex pattern exceeds the maximum length of %d bytes, delimiters and modifiers included.', $this->maxPatternLength), ErrorCode::PatternTooLong(), $offset, $trimmed, null, $offset + 1);
         }
     }
 
@@ -834,28 +807,28 @@ final class RegexParser
      * The fix for the mistakes users make most, by error code, when the
      * error carries none of its own.
      */
-    private static function commonHint($errorCode): ?string
+    private static function commonHint(ErrorCode $errorCode): ?string
     {
-        switch ($errorCode) {
-            case ErrorCode::CharclassUnclosed():
+        switch (true) {
+            case $errorCode === ErrorCode::CharclassUnclosed():
                 return 'Close the class with "]", or write "\\[" to match a literal "[".';
-            case ErrorCode::QuantifierNothingToRepeat():
+            case $errorCode === ErrorCode::QuantifierNothingToRepeat():
                 return 'Put the quantifier after the item it repeats, or escape it with a backslash to match it literally.';
-            case ErrorCode::QuantifierInvalidRange():
+            case $errorCode === ErrorCode::QuantifierInvalidRange():
                 return 'Write the smaller count first.';
-            case ErrorCode::QuantifierTooBig():
+            case $errorCode === ErrorCode::QuantifierTooBig():
                 return 'PCRE counts at most 65535 repetitions: lower the count, or use "*" or "+" for an open-ended repeat.';
-            case ErrorCode::RangeReversed():
+            case $errorCode === ErrorCode::RangeReversed():
                 return 'Write the lower end of the range first, or escape the "-" as "\\-" to match it literally.';
-            case ErrorCode::DelimiterInvalid():
+            case $errorCode === ErrorCode::DelimiterInvalid():
                 return 'Wrap the pattern in a pair of delimiters, such as "/.../" or "#...#".';
-            case ErrorCode::GroupNameInvalid():
+            case $errorCode === ErrorCode::GroupNameInvalid():
                 return 'Start a group name with a letter or "_", then use letters, digits and "_" only.';
-            case ErrorCode::GroupDuplicateName():
+            case $errorCode === ErrorCode::GroupDuplicateName():
                 return 'Rename one of the groups, or allow duplicate names with (?J).';
-            case ErrorCode::SubroutineMissingNamedGroup():
+            case $errorCode === ErrorCode::SubroutineMissingNamedGroup():
                 return 'Name the group the call reaches, or call a group the pattern names.';
-            case ErrorCode::UnicodePropertyInvalid():
+            case $errorCode === ErrorCode::UnicodePropertyInvalid():
                 return 'Use a property PCRE2 knows, such as \\p{L}, \\p{Lu}, \\p{N} or a script such as \\p{Greek}.';
             default:
                 return null;

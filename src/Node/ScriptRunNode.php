@@ -25,41 +25,33 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class ScriptRunNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $script;
-
+    public string $script;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface|null
      */
-    public $content;
-
+    public ?NodeInterface $content = null;
     /**
-     *
-     * @var bool
      */
-    public $atomic = false;
+    public bool $isAtomic = false;
 
     public function __construct(
         string $script,
         int $startPosition,
         int $endPosition,
         ?NodeInterface $content = null,
-        bool $atomic = false
+        bool $isAtomic = false
     ) {
         $this->script = $script;
-        /*
+        /**
          * Parsed content of the script run, when available. Positions inside
          * are relative to the payload text.
          */
         $this->content = $content;
-        /*
+        /**
          * Whether the body is atomic: "(*atomic_script_run:...)", short
          * "(*asr:...)", the same as "(*sr:(?>...))".
          */
-        $this->atomic = $atomic;
+        $this->isAtomic = $isAtomic;
         parent::__construct($startPosition, $endPosition);
     }
 

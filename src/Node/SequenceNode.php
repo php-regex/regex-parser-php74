@@ -24,7 +24,7 @@ final class SequenceNode extends AbstractNode
      * @var list<NodeInterface>
      *
      */
-    public $children;
+    public array $children;
 
     /**
      * @param array<NodeInterface> $children Renumbered in the order given

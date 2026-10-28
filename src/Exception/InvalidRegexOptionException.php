@@ -18,4 +18,6 @@ namespace PHPRegex\Parser\Exception;
  * `CaptureShape::matchShape()` is given a flag preg_match() refuses, or when
  * `CaptureShape::matchAllShape()` is given one preg_match_all() refuses.
  */
-final class InvalidRegexOptionException extends \InvalidArgumentException implements ExceptionInterface {}
+final class InvalidRegexOptionException extends \InvalidArgumentException implements ExceptionInterface
+{
+}

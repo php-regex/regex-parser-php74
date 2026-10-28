@@ -21,10 +21,8 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class BackrefNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $ref;
+    public string $ref;
 
     public function __construct(
         string $ref,

@@ -90,14 +90,14 @@ final class DisplayEscaper
      *
      * @var array<int, array<string, string>>
      */
-    private static $escapes = [];
+    private static array $escapes = [];
 
     /**
      * The hidden characters, in UTF-8, read once from the engine.
      *
      * @var list<string>|null
      */
-    private static $hidden;
+    private static ?array $hidden = null;
 
     /**
      * Escape control characters, the characters that move or hide text
@@ -200,34 +200,28 @@ final class DisplayEscaper
         $escaped = '';
         $length = \strlen($value);
 
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $length; ++$i) {
             $byte = \ord($value[$i]);
-            switch ($byte) {
-                case 0x0A:
+            switch (true) {
+                case 0x0A === $byte:
                     $spelling = '\\n';
-
                     break;
-                case 0x0D:
+                case 0x0D === $byte:
                     $spelling = '\\r';
-
                     break;
-                case 0x09:
+                case 0x09 === $byte:
                     $spelling = '\\t';
-
                     break;
-                case 0x5C:
+                case 0x5C === $byte:
                     $spelling = '\\\\';
-
                     break;
-                case 0x22:
+                case 0x22 === $byte:
                     $spelling = '\\"';
-
                     break;
                 default:
                     $spelling = ($byte < 0x20 || $byte > 0x7E)
                         ? \sprintf('\\x%02X', $byte)
                         : $value[$i];
-
                     break;
             }
             $escaped .= $spelling;
@@ -294,7 +288,7 @@ final class DisplayEscaper
         // The "}" that closes braces where PCRE reads a tab as padding.
         $paddedEnd = null;
 
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $length; ++$i) {
             $char = $body[$i];
             [$unit, $spelling] = self::unitAt($body, $i, $escapes);
 
@@ -302,7 +296,7 @@ final class DisplayEscaper
                 if ('\\' === $char && 'E' === ($body[$i + 1] ?? '')) {
                     $quoted = false;
                     $escaped .= '\\E';
-                    $i++;
+                    ++$i;
                 } else {
                     $escaped .= null !== $spelling ? '\\E'.$spelling.'\\Q' : $unit;
                     $i += \strlen($unit) - 1;
@@ -576,11 +570,12 @@ final class DisplayEscaper
         if (false !== strpos($flags->unset, 'x')) {
             return 0;
         }
+        $matchSubject574 = substr_count($flags->set, 'x');
 
-        switch (substr_count($flags->set, 'x')) {
-            case 0:
+        switch (true) {
+            case 0 === $matchSubject574:
                 return $level;
-            case 1:
+            case 1 === $matchSubject574:
                 return 1;
             default:
                 return 2;
@@ -661,15 +656,15 @@ final class DisplayEscaper
 
         $close = Delimiters::BRACKETS[$open] ?? $open;
         $depth = 0;
-        for ($i = $start + 1; $i < $length; $i++) {
+        for ($i = $start + 1; $i < $length; ++$i) {
             if ('\\' === $text[$i]) {
-                $i++;
+                ++$i;
             } elseif ($close === $text[$i] && 0 === $depth--) {
                 $modifiers = (string) substr($text, $i + 1);
 
                 return \strlen($modifiers) === strspn($modifiers, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r") ? [$start + 1, $i, $modifiers] : [0, $length, null];
             } elseif ($open === $text[$i]) {
-                $depth++;
+                ++$depth;
             }
         }
 
@@ -683,7 +678,7 @@ final class DisplayEscaper
     {
         if (!isset(self::$escapes[$mode])) {
             $escapes = [];
-            for ($byte = 0x00; $byte <= (self::RAW_BYTES === $mode ? 0xFF : 0x7F); $byte++) {
+            for ($byte = 0x00; $byte <= (self::RAW_BYTES === $mode ? 0xFF : 0x7F); ++$byte) {
                 if ($byte < 0x20 || $byte >= 0x7F) {
                     $escapes[\chr($byte)] = self::LETTER_ESCAPES[\chr($byte)] ?? \sprintf('\\x%02X', $byte);
                 }
@@ -752,10 +747,10 @@ final class DisplayEscaper
         }
 
         $length = \strlen($text);
-        for ($i = $offset + 2; $i < $length; $i++) {
+        for ($i = $offset + 2; $i < $length; ++$i) {
             $next = $text[$i + 1] ?? '';
             if ('\\' === $text[$i] && (']' === $next || '\\' === $next)) {
-                $i++;
+                ++$i;
             } elseif (('[' === $text[$i] && $terminator === $next) || ']' === $text[$i]) {
                 return null;
             } elseif ($terminator === $text[$i] && ']' === $next) {
@@ -804,13 +799,13 @@ final class DisplayEscaper
     private static function calloutStringEnd(string $text, int $offset, string $close): int
     {
         $length = \strlen($text);
-        for ($i = $offset; $i < $length; $i++) {
+        for ($i = $offset; $i < $length; ++$i) {
             if ($close === $text[$i]) {
                 if ($close !== ($text[$i + 1] ?? '')) {
                     return $i;
                 }
 
-                $i++;
+                ++$i;
             }
         }
 

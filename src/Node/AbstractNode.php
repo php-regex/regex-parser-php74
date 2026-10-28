@@ -19,16 +19,11 @@ namespace PHPRegex\Parser\Node;
 abstract class AbstractNode implements NodeInterface
 {
     /**
-     *
-     * @var int
      */
-    public $startPosition;
-
+    public int $startPosition;
     /**
-     *
-     * @var int
      */
-    public $endPosition;
+    public int $endPosition;
 
     public function __construct(int $startPosition, int $endPosition)
     {

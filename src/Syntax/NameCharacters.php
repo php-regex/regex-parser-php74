@@ -144,7 +144,7 @@ final class NameCharacters
      *
      * @var array<string, array{name: string, digit: string}>
      */
-    private static $fragments = [];
+    private static array $fragments = [];
 
     /**
      * The length in bytes of the decimal digit at $at, 0 when none stands

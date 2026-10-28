@@ -28,110 +28,69 @@ use PHPRegex\Parser\NewlineConvention;
 final class PatternInfo
 {
     /**
-     * @var int
-     *
      */
-    public $captureCount;
-
+    public int $captureCount;
     /**
      * @var array<string, list<int>>
      *
      */
-    public $names;
-
+    public array $names;
     /**
-     * @var int
-     *
      */
-    public $maxBackreference;
-
+    public int $maxBackreference;
     /**
-     * @var int
-     *
      */
-    public $minMatchLength;
-
+    public int $minMatchLength;
     /**
-     * @var int|null
-     *
      */
-    public $maxMatchLength;
-
+    public ?int $maxMatchLength;
     /**
-     * @var int
-     *
      */
-    public $maxLookbehind;
-
+    public int $maxLookbehind;
     /**
-     * @var bool
-     *
      */
-    public $usesBackslashC;
-
+    public bool $usesBackslashC;
     /**
-     * @var int|null
-     *
      */
-    public $matchLimit;
-
+    public ?int $matchLimit;
     /**
-     * @var int|null
-     *
      */
-    public $depthLimit;
-
+    public ?int $depthLimit;
     /**
-     * @var int|null
-     *
      */
-    public $heapLimit;
-
+    public ?int $heapLimit;
     /**
-     * @var NewlineConvention|null
-     *
      */
-    public $newline;
-
+    public ?NewlineConvention $newline;
     /**
-     * @var BsrConvention|null
-     *
      */
-    public $bsr;
-
+    public ?BsrConvention $bsr;
     /**
-     * @var bool
-     *
      */
-    public $anchoredStart;
-
+    public bool $anchoredStart;
     /**
-     * @var bool
-     *
      */
-    public $anchoredEnd;
+    public bool $anchoredEnd;
 
     /**
      * @internal built by PatternInfoAnalyzer::analyze()
      *
-     * @param int                                    $captureCount     the number of capturing groups, as a branch reset counts them (PCRE2 CAPTURECOUNT)
-     * @param array<string, list<int>>               $names            each group name, sorted, with its group numbers, ascending (PCRE2 NAMETABLE)
-     * @param int                                    $maxBackreference the highest group a back reference, a named one or a condition can name, 0 for none (PCRE2 BACKREFMAX)
-     * @param int                                    $minMatchLength   the fewest characters (UTF mode) or bytes $matches[0] holds; 0 when the pattern holds "\K"
-     * @param int|null                               $maxMatchLength   the most $matches[0] holds, null when unbounded
-     * @param int                                    $maxLookbehind    the longest lookbehind body, in characters (UTF mode) or bytes, 0 for none
-     * @param bool                                   $usesBackslashC   whether the pattern holds "\C" (PCRE2 HASBACKSLASHC)
-     * @param int|null                               $matchLimit       the "(*LIMIT_MATCH=)" the pattern asks for, the last one
-     * @param int|null                               $depthLimit       the "(*LIMIT_DEPTH=)" or "(*LIMIT_RECURSION=)" it asks for, the last one
-     * @param int|null                               $heapLimit        the "(*LIMIT_HEAP=)" it asks for, the last one
-     * @param NewlineConvention|null                 $newline          the newline convention it sets, null when it sets none
-     * @param BsrConvention|null                     $bsr              what it makes "\R" match, null when it does not say
-     * @param bool                                   $anchoredStart    proven: every match attempt is tied to where the search starts
-     * @param bool                                   $anchoredEnd      proven: every match ends at the end of the subject
-     * @param ?\PHPRegex\Parser\NewlineConvention::* $newline
-     * @param ?\PHPRegex\Parser\BsrConvention::*     $bsr
+     * @param int                      $captureCount     the number of capturing groups, as a branch reset counts them (PCRE2 CAPTURECOUNT)
+     * @param array<string, list<int>> $names            each group name, sorted, with its group numbers, ascending (PCRE2 NAMETABLE)
+     * @param int                      $maxBackreference the highest group a back reference, a named one or a condition can name, 0 for none (PCRE2 BACKREFMAX)
+     * @param int                      $minMatchLength   the fewest characters (UTF mode) or bytes $matches[0] holds; 0 when the pattern holds "\K"
+     * @param int|null                 $maxMatchLength   the most $matches[0] holds, null when unbounded
+     * @param int                      $maxLookbehind    the longest lookbehind body, in characters (UTF mode) or bytes, 0 for none
+     * @param bool                     $usesBackslashC   whether the pattern holds "\C" (PCRE2 HASBACKSLASHC)
+     * @param int|null                 $matchLimit       the "(*LIMIT_MATCH=)" the pattern asks for, the last one
+     * @param int|null                 $depthLimit       the "(*LIMIT_DEPTH=)" or "(*LIMIT_RECURSION=)" it asks for, the last one
+     * @param int|null                 $heapLimit        the "(*LIMIT_HEAP=)" it asks for, the last one
+     * @param NewlineConvention|null   $newline          the newline convention it sets, null when it sets none
+     * @param BsrConvention|null       $bsr              what it makes "\R" match, null when it does not say
+     * @param bool                     $anchoredStart    proven: every match attempt is tied to where the search starts
+     * @param bool                     $anchoredEnd      proven: every match ends at the end of the subject
      */
-    public function __construct(int $captureCount, array $names, int $maxBackreference, int $minMatchLength, ?int $maxMatchLength, int $maxLookbehind, bool $usesBackslashC, ?int $matchLimit, ?int $depthLimit, ?int $heapLimit, ?\PHPRegex\Parser\NewlineConvention $newline, ?\PHPRegex\Parser\BsrConvention $bsr, bool $anchoredStart, bool $anchoredEnd)
+    public function __construct(int $captureCount, array $names, int $maxBackreference, int $minMatchLength, ?int $maxMatchLength, int $maxLookbehind, bool $usesBackslashC, ?int $matchLimit, ?int $depthLimit, ?int $heapLimit, ?NewlineConvention $newline, ?BsrConvention $bsr, bool $anchoredStart, bool $anchoredEnd)
     {
         $this->captureCount = $captureCount;
         $this->names = $names;

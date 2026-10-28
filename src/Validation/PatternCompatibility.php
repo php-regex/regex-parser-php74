@@ -29,7 +29,7 @@ final class PatternCompatibility
      * @var list<TargetVerdict>
      *
      */
-    private $verdicts;
+    private array $verdicts;
 
     /**
      * @internal built by CompatibilityChecker::check()

@@ -25,22 +25,14 @@ use PHPRegex\Parser\Node\NodeInterface;
 final class ConditionalHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $condition;
-
+    public NodeInterface $condition;
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $yes;
-
+    public Hir $yes;
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $no;
+    public Hir $no;
 
     public function __construct(
         NodeInterface $condition,

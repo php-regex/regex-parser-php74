@@ -29,76 +29,49 @@ namespace PHPRegex\Parser\Hir;
 final class Properties
 {
     /**
-     * Literals longer than this are cut: a prefix a few hundred characters
-     * long already says what it has to.
      */
-    public const MAX_LITERAL = 256;
-
+    public int $minLength;
     /**
-     * @var int
-     *
      */
-    public $minLength;
-
+    public ?int $maxLength;
     /**
-     * @var int|null
-     *
      */
-    public $maxLength;
-
+    public ?bool $nullable;
     /**
-     * @var bool|null
-     *
      */
-    public $nullable;
-
+    public ?CharSet $first;
     /**
-     * @var CharSet|null
-     *
      */
-    public $first;
-
-    /**
-     * @var CharSet|null
-     *
-     */
-    public $last;
-
+    public ?CharSet $last;
     /**
      * @var list<int>|null
      *
      */
-    public $literal;
-
+    public ?array $literal;
     /**
      * @var list<int>
      *
      */
-    public $prefix;
-
+    public array $prefix;
     /**
      * @var list<int>
      *
      */
-    public $suffix;
-
+    public array $suffix;
     /**
-     * @var int
-     *
      */
-    public $captureCount;
-
+    public int $captureCount;
     /**
-     * @var bool
-     *
      */
-    public $regular;
-
+    public bool $regular;
     /**
-     * @var bool
-     *
      */
-    public $accepts;
+    public bool $accepts;
+    /**
+     * Literals longer than this are cut: a prefix a few hundred characters
+     * long already says what it has to.
+     */
+    public const MAX_LITERAL = 256;
 
     /**
      * @param int            $minLength    no match reads fewer characters
@@ -204,7 +177,7 @@ final class Properties
             $accepted = $accepted || $part->accepts;
             $max = null === $max || null === $part->maxLength ? null : self::add($max, $part->maxLength);
             $nullable = true === $nullable && true === $part->nullable;
-            $literal = null === $literal || null === $part->literal || $part->accepts ? null : array_merge(is_array($literal) ? $literal : iterator_to_array($literal), is_array($part->literal) ? $part->literal : iterator_to_array($part->literal));
+            $literal = null === $literal || null === $part->literal || $part->accepts ? null : array_merge($literal, is_array($part->literal) ? $part->literal : iterator_to_array($part->literal));
             $captures += $part->captureCount;
             $regular = $regular && $part->regular;
         }
@@ -272,7 +245,7 @@ final class Properties
         );
     }
 
-    public static function repetition(self $body, int $min, ?int $max, $greed): self
+    public static function repetition(self $body, int $min, ?int $max, Greed $greed): self
     {
         if (0 === $max) {
             return self::zeroWidth(true, $body->captureCount);
@@ -442,7 +415,7 @@ final class Properties
     {
         $common = [];
         $length = min(\count($left), \count($right));
-        for ($index = 0; $index < $length && $left[$index] === $right[$index]; $index++) {
+        for ($index = 0; $index < $length && $left[$index] === $right[$index]; ++$index) {
             $common[] = $left[$index];
         }
 
@@ -465,7 +438,7 @@ final class Properties
         }
 
         $copies = [];
-        for ($copy = 0; $copy < $times; $copy++) {
+        for ($copy = 0; $copy < $times; ++$copy) {
             $copies = array_merge($copies, $text);
         }
 

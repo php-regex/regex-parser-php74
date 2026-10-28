@@ -19,38 +19,27 @@ namespace PHPRegex\Parser\Printer;
 final class FormatResult
 {
     /**
-     *
-     * @var string
      */
-    public $pattern;
-
+    public string $pattern;
     /**
-     *
-     * @var bool
      */
-    public $changed;
-
+    public bool $changed;
     /**
-     *
-     * @var \PHPRegex\Parser\Printer\FormatRefusal|null
      */
-    public $refusal;
+    public ?FormatRefusal $refusal = null;
 
-    /**
-     * @param ?\PHPRegex\Parser\Printer\FormatRefusal::* $refusal
-     */
     public function __construct(string $pattern, bool $changed, ?FormatRefusal $refusal = null)
     {
-        /*
+        /**
          * The pattern, delimiters and flags included: laid out, compacted,
          * or the input as it was written.
          */
         $this->pattern = $pattern;
-        /*
+        /**
          * Whether the pattern differs from the input.
          */
         $this->changed = $changed;
-        /*
+        /**
          * Why the input was given back as it was, when it was refused.
          */
         $this->refusal = $refusal;

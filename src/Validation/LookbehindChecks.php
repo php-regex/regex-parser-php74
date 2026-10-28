@@ -60,11 +60,32 @@ use PHPRegex\Parser\Syntax\PcreVerb;
 final class LookbehindChecks
 {
     /**
+     * Measures a lookbehind branch, telling this class of what it meets.
+     *
+     */
+    private LookbehindLength $length;
+
+    /**
+     * How many branches have been measured so far.
+     */
+    private int $branchMeasures = 0;
+
+    /**
+     * The lookbehind being measured, where PCRE reports the measure it gave
+     * up.
+     */
+    private ?GroupNode $measured = null;
+
+    /**
+     * Where the text the lookbehind measured counts its positions from
+     * starts in the whole pattern.
+     */
+    private int $offset = 0;
+    /**
      * PCRE's own ceiling on a fixed-length lookbehind, the same on every
      * PCRE2 release; max_lookbehind_length only bounds variable ones.
      */
     private const MAX_FIXED_LENGTH = PcreNumber::MAX;
-
     /**
      * How many branches PCRE measures across all the lookbehinds of a
      * pattern before it gives up: each branch of a lookbehind, and each
@@ -72,67 +93,20 @@ final class LookbehindChecks
      * capturing group once; with one, each time it meets it.
      */
     private const MAX_BRANCH_MEASURES = 2001;
-
     /**
-     * @var GroupIndex
-     *
      */
-    private $groups;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
+    private GroupIndex $groups;
     /**
      * @var \Closure((BackrefNode|SubroutineNode)):void
      *
      */
-    private $checkReference;
-
+    private \Closure $checkReference;
     /**
-     * @var string|null
-     *
      */
-    private $pattern;
-
+    private ?string $pattern;
     /**
-     * @var int
-     *
      */
-    private $maxLength;
-
-    /**
-     * Measures a lookbehind branch, telling this class of what it meets.
-     *
-     *
-     * @var \PHPRegex\Parser\Analysis\LookbehindLength
-     */
-    private $length;
-
-    /**
-     * How many branches have been measured so far.
-     *
-     * @var int
-     */
-    private $branchMeasures = 0;
-
-    /**
-     * The lookbehind being measured, where PCRE reports the measure it gave
-     * up.
-     *
-     * @var \PHPRegex\Parser\Node\GroupNode|null
-     */
-    private $measured;
-
-    /**
-     * Where the text the lookbehind measured counts its positions from
-     * starts in the whole pattern.
-     *
-     * @var int
-     */
-    private $offset = 0;
+    private int $maxLength;
 
     /**
      * @param GroupIndex                                 $groups         the groups of the pattern,
@@ -158,7 +132,6 @@ final class LookbehindChecks
         bool $utf
     ) {
         $this->groups = $groups;
-        $this->target = $target;
         $this->checkReference = $checkReference;
         $this->pattern = $pattern;
         $this->maxLength = $maxLength;
@@ -372,37 +345,29 @@ final class LookbehindChecks
         }
 
         switch (true) {
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 $children = [$node->child];
-
                 break;
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 $children = $node->children;
-
                 break;
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 $children = $node->alternatives;
-
                 break;
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 $children = [$node->node];
-
                 break;
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 $children = [$node->condition, $node->yes, $node->no];
-
                 break;
-            case $node instanceof DefineNode:
+            case true === $node instanceof DefineNode:
                 $children = [$node->content];
-
                 break;
-            case $node instanceof ScriptRunNode:
+            case true === $node instanceof ScriptRunNode:
                 $children = null === $node->content ? [] : [$node->content];
-
                 break;
             default:
                 $children = [];
-
                 break;
         }
 
@@ -418,8 +383,8 @@ final class LookbehindChecks
      * does not measure at all, unless it failed already while being read:
      * one back past the first group, or to group zero.
      *
-     * @param \PHPRegex\Parser\Node\SubroutineNode|\PHPRegex\Parser\Node\BackrefNode $node
-     * @param list<GroupNode>                                                        $groups the groups it names
+     * @param list<GroupNode>            $groups the groups it names
+     * @param SubroutineNode|BackrefNode $node
      */
     private function checkMeasuredReference($node, array $groups): void
     {
@@ -525,17 +490,17 @@ final class LookbehindChecks
     private function containsGraphemeCluster(NodeInterface $node): bool
     {
         switch (true) {
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 return 'X' === $node->value;
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return $this->anyContainsGraphemeCluster($node->children);
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return $this->anyContainsGraphemeCluster($node->alternatives);
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return !\in_array($node->type, [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative()], true) && $this->containsGraphemeCluster($node->child);
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return $this->containsGraphemeCluster($node->node);
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 return $this->anyContainsGraphemeCluster([$node->condition, $node->yes, $node->no]);
             default:
                 return false;
@@ -559,8 +524,8 @@ final class LookbehindChecks
     /**
      * @return never
      */
-    private function raise(string $message, int $position, $code, ?string $hint = null)
+    private function raise(string $message, int $position, ErrorCode $code, ?string $hint = null)
     {
-        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, $hint);
+        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, null, $hint);
     }
 }

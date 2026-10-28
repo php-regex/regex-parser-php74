@@ -46,9 +46,32 @@ use PHPRegex\Parser\Text\Ascii;
 final class ParserOptions
 {
     /**
+     * The PHP version, the PCRE2 release and the locale patterns are judged
+     * for.
+     *
+     */
+    public PcreTarget $target;
+    /**
+     */
+    public int $maxPatternLength;
+    /**
+     */
+    public int $maxLookbehindLength;
+    /**
+     */
+    public CacheInterface $cache;
+    /**
+     * @var array<string>
+     *
+     */
+    public array $redosIgnoredPatterns = [];
+    /**
+     */
+    public bool $runtimePcreValidation = false;
+    /**
      * Default maximum allowed regex pattern length.
      */
-    public const DEFAULT_MAX_PATTERN_LENGTH = 100000;
+    public const DEFAULT_MAX_PATTERN_LENGTH = 100_000;
 
     /**
      * Default maximum length of a variable-length lookbehind, PCRE2's own
@@ -94,49 +117,8 @@ final class ParserOptions
     ];
 
     /**
-     * @var int
-     *
      */
-    public $maxPatternLength;
-
-    /**
-     * @var int
-     *
-     */
-    public $maxLookbehindLength;
-
-    /**
-     * @var CacheInterface
-     *
-     */
-    public $cache;
-
-    /**
-     * @var array<string>
-     *
-     */
-    public $redosIgnoredPatterns = [];
-
-    /**
-     * @var bool
-     *
-     */
-    public $runtimePcreValidation = false;
-
-    /**
-     * @var int
-     *
-     */
-    public $maxRecursionDepth = self::DEFAULT_MAX_RECURSION_DEPTH;
-
-    /**
-     * The PHP version, the PCRE2 release and the locale patterns are judged
-     * for.
-     *
-     *
-     * @var \PHPRegex\Parser\PcreTarget
-     */
-    public $target;
+    public int $maxRecursionDepth = self::DEFAULT_MAX_RECURSION_DEPTH;
 
     /**
      * Create new configuration options.
@@ -186,12 +168,7 @@ final class ParserOptions
         if ($this->runtimePcreValidation && !$this->target->isRunningEngine()) {
             $running = PcreTarget::runtime();
 
-            throw new InvalidRegexOptionException(\sprintf(
-                '"runtime_pcre_validation" compiles with the running PHP, which does not judge the target (%s); drop one of them.',
-                $this->target->withLocale($running->locale)->isRunningEngine()
-                    ? \sprintf('locale "%s"', $this->target->locale)
-                    : \sprintf('PHP %d.%d, PCRE2 %s', intdiv($this->target->phpVersionId, 10000), intdiv($this->target->phpVersionId, 100) % 100, $this->target->pcreVersion),
-            ));
+            throw new InvalidRegexOptionException(\sprintf('"runtime_pcre_validation" compiles with the running PHP, which does not judge the target (%s); drop one of them.', $this->target->withLocale($running->locale)->isRunningEngine() ? \sprintf('locale "%s"', $this->target->locale) : \sprintf('PHP %d.%d, PCRE2 %s', intdiv($this->target->phpVersionId, 10000), intdiv($this->target->phpVersionId, 100) % 100, $this->target->pcreVersion)));
         }
     }
 
@@ -285,6 +262,39 @@ final class ParserOptions
     }
 
     /**
+     * The target of a PHP, a PCRE2 release and a locale, each named or
+     * not: the one place the options, the lint and the bridges resolve it.
+     * A release named is used as is, older or newer than the one the PHP
+     * bundles. Without one, the running PHP gets the PCRE2 it links, and a
+     * PHP named the PCRE2 its sources bundle (PcreTarget::bundledWith()):
+     * the running one included, unless $runningSpeaksForItsMinor lets the
+     * running PCRE2 judge every PHP of the running PHP's minor version, as
+     * the lint, the language server and the bridges do; the options and
+     * the library's own estimates (RangeDiff, the Rector rules) leave it
+     * off. The locale is the runtime's unless one is named.
+     *
+     * @internal
+     *
+     * @param int|null    $phpVersionId             a PHP_VERSION_ID, null for the running PHP
+     * @param string|null $pcreVersion              a PCRE2 release, "10.44", as PCRE_VERSION spells it or
+     *                                              without its date
+     * @param string|null $locale                   an LC_CTYPE locale, "tr_TR.UTF-8"
+     * @param bool        $runningSpeaksForItsMinor whether a PHP named of the running PHP's minor version gets
+     *                                              the running PCRE2
+     *
+     * @throws InvalidRegexOptionException when $pcreVersion names no release, or $locale one this machine
+     *                                     cannot set
+     */
+    public static function resolveTarget(?int $phpVersionId, ?string $pcreVersion = null, ?string $locale = null, bool $runningSpeaksForItsMinor = false): PcreTarget
+    {
+        $pcreVersion ??= null === $phpVersionId || ($runningSpeaksForItsMinor && intdiv($phpVersionId, 100) === intdiv(\PHP_VERSION_ID, 100))
+            ? \PCRE_VERSION
+            : PcreTarget::bundledWith($phpVersionId)->pcreVersion;
+
+        return new PcreTarget($phpVersionId ?? \PHP_VERSION_ID, $pcreVersion, $locale);
+    }
+
+    /**
      * Create default configuration with no custom options.
      *
      * @return self Default configuration instance
@@ -313,11 +323,7 @@ final class ParserOptions
         );
 
         if ([] !== $invalidKeys) {
-            throw new InvalidRegexOptionException(\sprintf(
-                'Unknown option(s): %s. Allowed options are: %s.',
-                implode(', ', $invalidKeys),
-                implode(', ', self::VALID_OPTIONS),
-            ));
+            throw new InvalidRegexOptionException(\sprintf('Unknown option(s): %s. Allowed options are: %s.', implode(', ', $invalidKeys), implode(', ', self::VALID_OPTIONS)));
         }
     }
 
@@ -334,9 +340,7 @@ final class ParserOptions
 
         // The range is the constructor's to check.
         if (!\is_int($length)) {
-            throw new InvalidRegexOptionException(
-                '"max_pattern_length" must be a positive integer.',
-            );
+            throw new InvalidRegexOptionException('"max_pattern_length" must be a positive integer.');
         }
 
         return $length;
@@ -354,9 +358,7 @@ final class ParserOptions
         $length = $options['max_lookbehind_length'] ?? self::DEFAULT_MAX_LOOKBEHIND_LENGTH;
 
         if (!\is_int($length)) {
-            throw new InvalidRegexOptionException(
-                '"max_lookbehind_length" must be a non-negative integer.',
-            );
+            throw new InvalidRegexOptionException('"max_lookbehind_length" must be a non-negative integer.');
         }
 
         return $length;
@@ -372,9 +374,7 @@ final class ParserOptions
         $runtimeValidation = $options['runtime_pcre_validation'] ?? false;
 
         if (!\is_bool($runtimeValidation)) {
-            throw new InvalidRegexOptionException(
-                '"runtime_pcre_validation" must be a boolean.',
-            );
+            throw new InvalidRegexOptionException('"runtime_pcre_validation" must be a boolean.');
         }
 
         return $runtimeValidation;
@@ -392,9 +392,7 @@ final class ParserOptions
         $depth = $options['max_recursion_depth'] ?? self::DEFAULT_MAX_RECURSION_DEPTH;
 
         if (!\is_int($depth)) {
-            throw new InvalidRegexOptionException(
-                '"max_recursion_depth" must be a positive integer.',
-            );
+            throw new InvalidRegexOptionException('"max_recursion_depth" must be a positive integer.');
         }
 
         return $depth;
@@ -425,16 +423,10 @@ final class ParserOptions
         // the PCRE2 it links unless a release is given beside it.
         $phpVersion = $options['php_version'] ?? null;
         if (\is_string($phpVersion) && 'runtime' === Ascii::lower(trim($phpVersion, " \t\n\r\0\x0B"))) {
-            return new PcreTarget(\PHP_VERSION_ID, $pcreVersion ?? \PCRE_VERSION, $locale);
+            return self::resolveTarget(null, $pcreVersion, $locale);
         }
 
-        $phpVersionId = self::getPhpVersionId($options);
-
-        return new PcreTarget(
-            $phpVersionId ?? \PHP_VERSION_ID,
-            $pcreVersion ?? (null === $phpVersionId ? \PCRE_VERSION : PcreTarget::bundledWith($phpVersionId)->pcreVersion),
-            $locale,
-        );
+        return self::resolveTarget(self::getPhpVersionId($options), $pcreVersion, $locale);
     }
 
     /**
@@ -502,9 +494,7 @@ final class ParserOptions
             return $cacheOption;
         }
 
-        throw new InvalidRegexOptionException(
-            'The "cache" option must be null, a cache path, or a CacheInterface implementation.',
-        );
+        throw new InvalidRegexOptionException('The "cache" option must be null, a cache path, or a CacheInterface implementation.');
     }
 
     /**
@@ -519,9 +509,7 @@ final class ParserOptions
         $trimmedPath = trim($path, " \t\n\r\0\x0B");
 
         if ('' === $trimmedPath) {
-            throw new InvalidRegexOptionException(
-                'The "cache" option cannot be an empty string.',
-            );
+            throw new InvalidRegexOptionException('The "cache" option cannot be an empty string.');
         }
 
         return new FilesystemCache($trimmedPath);
@@ -539,9 +527,7 @@ final class ParserOptions
         $patterns = $options['redos_ignored_patterns'] ?? [];
 
         if (!\is_array($patterns)) {
-            throw new InvalidRegexOptionException(
-                '"redos_ignored_patterns" must be a list of strings.',
-            );
+            throw new InvalidRegexOptionException('"redos_ignored_patterns" must be a list of strings.');
         }
 
         if ([] === $patterns) {
@@ -567,9 +553,7 @@ final class ParserOptions
     {
         foreach ($patterns as $pattern) {
             if (!\is_string($pattern)) {
-                throw new InvalidRegexOptionException(
-                    '"redos_ignored_patterns" must contain only strings.',
-                );
+                throw new InvalidRegexOptionException('"redos_ignored_patterns" must contain only strings.');
             }
         }
     }

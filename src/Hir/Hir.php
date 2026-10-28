@@ -29,22 +29,14 @@ namespace PHPRegex\Parser\Hir;
 abstract class Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Properties
      */
-    public $properties;
-
+    public Properties $properties;
     /**
-     *
-     * @var int
      */
-    public $startPosition;
-
+    public int $startPosition;
     /**
-     *
-     * @var int
      */
-    public $endPosition;
+    public int $endPosition;
 
     public function __construct(Properties $properties, int $startPosition, int $endPosition)
     {

@@ -25,12 +25,9 @@ final class CalloutNode extends AbstractNode
      * @var int|string|null
      */
     public $identifier;
-
     /**
-     *
-     * @var bool
      */
-    public $isStringIdentifier;
+    public bool $isStringIdentifier;
 
     /**
      * @param int|string|null $identifier

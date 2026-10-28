@@ -21,36 +21,28 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class UnicodePropNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $prop;
-
+    public string $prop;
     /**
-     *
-     * @var bool
      */
-    public $hasBraces;
-
+    public bool $hasBraces;
     /**
-     *
-     * @var bool
      */
-    public $negatedSyntax = false;
+    public bool $isNegatedSyntax = false;
 
     public function __construct(
         string $prop,
         bool $hasBraces,
         int $startPosition,
         ?int $endPosition = null,
-        bool $negatedSyntax = false
+        bool $isNegatedSyntax = false
     ) {
         $this->prop = $prop;
         $this->hasBraces = $hasBraces;
-        /*
+        /**
          * Whether the source used the \P negated syntax (vs \p{^...}).
          */
-        $this->negatedSyntax = $negatedSyntax;
+        $this->isNegatedSyntax = $isNegatedSyntax;
         parent::__construct($startPosition, $endPosition ?? $startPosition);
     }
 

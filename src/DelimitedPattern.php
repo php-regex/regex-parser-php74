@@ -19,25 +19,17 @@ use PHPRegex\Parser\Syntax\PatternParser;
 /**
  * Represents a regex pattern with its components.
  */
-final class DelimitedPattern implements \Stringable
+final class DelimitedPattern
 {
     /**
-     *
-     * @var string
      */
-    public $pattern;
-
+    public string $pattern;
     /**
-     *
-     * @var string
      */
-    public $flags = '';
-
+    public string $flags = '';
     /**
-     *
-     * @var string
      */
-    public $delimiter = '/';
+    public string $delimiter = '/';
 
     public function __construct(string $pattern, string $flags = '', string $delimiter = '/')
     {

@@ -23,26 +23,18 @@ namespace PHPRegex\Parser\Hir;
 final class LookHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $body;
-
+    public Hir $body;
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\LookKind
      */
-    public $kind;
-
+    public LookKind $kind;
     /**
-     *
-     * @var bool
      */
-    public $atomic = true;
+    public bool $atomic = true;
 
     public function __construct(
         Hir $body,
-        $kind,
+        LookKind $kind,
         bool $atomic = true,
         int $startPosition = 0,
         int $endPosition = 0

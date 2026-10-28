@@ -18,4 +18,6 @@ namespace PHPRegex\Parser\Exception;
  *
  * @see \PHPRegex\Parser\Syntax\TokenParser
  */
-final class ResourceLimitException extends LimitException implements ExceptionInterface {}
+final class ResourceLimitException extends LimitException implements ExceptionInterface
+{
+}

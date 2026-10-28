@@ -22,35 +22,24 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class ClassSetOperationNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\ClassSetOperator
      */
-    public $operator;
-
+    public ClassSetOperator $operator;
     /**
-     * @var NodeInterface|null
-     *
      */
-    public $left;
-
+    public ?NodeInterface $left;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $right;
-
+    public NodeInterface $right;
     /**
-     * @var string
-     *
      */
-    public $symbol;
+    public string $symbol;
 
     /**
      * @param NodeInterface|null $left   the left operand; null for the complement
      * @param string             $symbol the operator as written: "+", "|", "&", "-", "^" or "!"
      */
     public function __construct(
-        $operator,
+        ClassSetOperator $operator,
         ?NodeInterface $left,
         NodeInterface $right,
         string $symbol,

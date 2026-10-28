@@ -22,16 +22,11 @@ use PHPRegex\Parser\Exception\InvalidRegexOptionException;
 final class PcreLimits
 {
     /**
-     *
-     * @var int
      */
-    public $backtrackLimit;
-
+    public int $backtrackLimit;
     /**
-     *
-     * @var int
      */
-    public $recursionLimit;
+    public int $recursionLimit;
 
     /**
      * @throws InvalidRegexOptionException when a limit is below 1

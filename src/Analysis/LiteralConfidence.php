@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Analysis;
 
 /**
- * Cached-instance twin of the LiteralConfidence enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The LiteralConfidence enum as a class of shared instances: LiteralConfidence::Low() returns
+ * the same instance at each call.
  */
-final class LiteralConfidence
+final class LiteralConfidence implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,29 +25,17 @@ final class LiteralConfidence
 
     public static function Low(): self
     {
-        if (!isset(self::$instances['Low'])) {
-            self::$instances['Low'] = new self('Low', 'low');
-        }
-
-        return self::$instances['Low'];
+        return self::$instances['Low'] ??= new self('Low', 'low');
     }
 
     public static function Medium(): self
     {
-        if (!isset(self::$instances['Medium'])) {
-            self::$instances['Medium'] = new self('Medium', 'medium');
-        }
-
-        return self::$instances['Medium'];
+        return self::$instances['Medium'] ??= new self('Medium', 'medium');
     }
 
     public static function High(): self
     {
-        if (!isset(self::$instances['High'])) {
-            self::$instances['High'] = new self('High', 'high');
-        }
-
-        return self::$instances['High'];
+        return self::$instances['High'] ??= new self('High', 'high');
     }
 
     /**
@@ -82,13 +52,12 @@ final class LiteralConfidence
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Analysis\\LiteralConfidence');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for LiteralConfidence.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

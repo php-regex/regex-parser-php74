@@ -43,12 +43,12 @@ final class RepeatCount
     public static function overflowBeforeTen37(string $pattern, int $brace): ?int
     {
         $at = $brace + 1;
-        for ($number = 0; $number < 2; $number++) {
+        for ($number = 0; $number < 2; ++$number) {
             $start = $at;
             $value = 0;
             while (Ascii::isDigit($pattern[$at] ?? '')) {
                 $value = $value * 10 + (int) $pattern[$at];
-                $at++;
+                ++$at;
                 if ($value > PcreNumber::MAX) {
                     return $at;
                 }
@@ -57,7 +57,7 @@ final class RepeatCount
             if ($at === $start || ',' !== ($pattern[$at] ?? '')) {
                 return null;
             }
-            $at++;
+            ++$at;
         }
 
         return null;

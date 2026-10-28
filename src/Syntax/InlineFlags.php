@@ -30,6 +30,12 @@ use PHPRegex\Parser\Text\Bytes;
 final class InlineFlags
 {
     /**
+     */
+    public string $set;
+    /**
+     */
+    public string $unset;
+    /**
      * The modifiers PCRE lets a group carry, "r" excepted: it arrived in
      * PCRE2 10.43 and the caller says whether it may be used. "u" and "d"
      * are PHP modifiers only: PCRE refuses them after "(?".
@@ -43,25 +49,13 @@ final class InlineFlags
      */
     private const RESET_BY_CARET = 'imnrsx';
 
-    /**
-     *
-     * @var string
-     */
-    public $set;
-
-    /**
-     *
-     * @var string
-     */
-    public $unset;
-
     private function __construct(string $set, string $unset)
     {
-        /*
+        /**
          * Modifiers the group turns on.
          */
         $this->set = $set;
-        /*
+        /**
          * Modifiers the group turns off, including the ones "^" reset.
          */
         $this->unset = $unset;

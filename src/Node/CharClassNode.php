@@ -21,16 +21,11 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class CharClassNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $expression;
-
+    public NodeInterface $expression;
     /**
-     *
-     * @var bool
      */
-    public $isNegated;
+    public bool $isNegated;
 
     public function __construct(
         NodeInterface $expression,

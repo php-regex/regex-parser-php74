@@ -58,6 +58,42 @@ use PHPRegex\Parser\Text\Utf8;
 final class ClassLength
 {
     /**
+     * The bytes of the lists the class last measured keeps beside the code:
+     * a copy of the class in a repeated group shares them.
+     */
+    public int $charListBytes = 0;
+    /**
+     * Up to 10.47, what the class counts before its lists are checked
+     * against the limit, as it is compiled: its header and its properties;
+     * of no use where it keeps no lists.
+     */
+    public int $unitsBeforeLists = 0;
+    /**
+     * The other cases of the release, once a character past 255 needs them.
+     */
+    private ?OtherCases $cases = null;
+    /**
+     * Up to 10.44, the first and the last character of the member whose
+     * other cases are added: an other case inside it adds nothing.
+     *
+     * @var array{0: int, 1: int}
+     */
+    private array $member = [0, 0];
+    /**
+     * From 10.45, what the class last measured compiles to: whether it is
+     * an extended class, whether it holds characters below 256, whether
+     * the characters past 255 it holds are turned over, its ranges merged,
+     * its properties, whether properties add to its map, whether the
+     * locale may add to it past ASCII, and the map of the characters below
+     * 256 its properties set, null where a property is not known.
+     *
+     * @var array{0: bool, 1: bool, 2: bool, 3: list<array{0: int, 1: int}>, 4: int, 5: bool, 6: bool, 7: string|null}|null
+     */
+    private ?array $shape = null;
+    /**
+     */
+    private bool $utf;
+    /**
      * The characters of "\h" and "\v", as ranges.
      */
     private const SPACES = [
@@ -104,83 +140,24 @@ final class ClassLength
     private const CASED_UNDER_TURKISH_RULES = [0x130, 0x131];
 
     /**
-     * The bytes of the lists the class last measured keeps beside the code:
-     * a copy of the class in a repeated group shares them.
-     *
-     * @var int
      */
-    public $charListBytes = 0;
+    private bool $ucp;
 
     /**
-     * Up to 10.47, what the class counts before its lists are checked
-     * against the limit, as it is compiled: its header and its properties;
-     * of no use where it keeps no lists.
-     *
-     * @var int
      */
-    public $unitsBeforeLists = 0;
+    private bool $turkish;
 
     /**
-     * @var bool
-     *
      */
-    private $utf;
+    private bool $asciiOptions;
 
     /**
-     * @var bool
-     *
      */
-    private $ucp;
+    private PcreTarget $target;
 
     /**
-     * @var bool
-     *
      */
-    private $turkish;
-
-    /**
-     * @var bool
-     *
-     */
-    private $asciiOptions;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
-    /**
-     * @var CharacterTables|null
-     *
-     */
-    private $tables;
-
-    /**
-     * The other cases of the release, once a character past 255 needs them.
-     *
-     * @var \PHPRegex\Parser\Validation\OtherCases|null
-     */
-    private $cases;
-
-    /**
-     * Up to 10.44, the first and the last character of the member whose
-     * other cases are added: an other case inside it adds nothing.
-     *
-     * @var array{0: int, 1: int}
-     */
-    private $member = [0, 0];
-
-    /**
-     * From 10.45, what the class last measured compiles to: whether it is
-     * an extended class, whether it holds characters below 256, whether
-     * the characters past 255 it holds are turned over, its ranges merged,
-     * its properties, whether properties may add to its map, and whether
-     * the locale may add to it past ASCII.
-     *
-     * @var array{0: bool, 1: bool, 2: bool, 3: list<array{0: int, 1: int}>, 4: int, 5: bool, 6: bool}|null
-     */
-    private $shape;
+    private ?CharacterTables $tables = null;
 
     /**
      * @param bool                 $utf          whether PCRE reads the pattern as UTF-8
@@ -257,17 +234,19 @@ final class ClassLength
             return null;
         }
 
-        [$extended, $map, $flip, $ranges, $properties, $mapFromProperties, $localeMaps] = $this->shape;
-        $ones = ExtendedClassLength::NO_BYTE;
-        foreach ($ranges as [$low, $high]) {
-            for ($byte = $low; $byte <= min($high, 0xFF); $byte++) {
-                $ones[$byte >> 3] = \chr(\ord($ones[$byte >> 3]) | 1 << ($byte & 7));
-            }
+        [$extended, $map, $flip, $ranges, $properties, , $localeMaps, $propertyMap] = $this->shape;
+
+        // Each property sets what it matches below 256, from the tables of
+        // the release; without UTF what the locale sets past ASCII is not
+        // known where its tables are not given.
+        $ones = self::mapOf($ranges);
+        $unknown = ExtendedClassLength::NO_BYTE;
+        if (null === $propertyMap) {
+            $unknown = ~$ones;
+        } else {
+            $ones |= $propertyMap;
         }
 
-        // What a property sets below 256 is not known here, nor without
-        // UTF what the locale sets past ASCII where its tables are not given.
-        $unknown = $properties > 0 || $mapFromProperties ? ~$ones : ExtendedClassLength::NO_BYTE;
         if (!$this->utf && null === $this->tables && ($localeMaps || $caseless)) {
             $unknown |= ~$ones & ExtendedClassLength::PAST_ASCII;
         }
@@ -277,13 +256,13 @@ final class ClassLength
         }
 
         // The map of an extended class is lifted out of it.
-        return [(static function () use ($extended, $length, $negated, $flip) {
+        return [(function () use ($extended, $length, $negated, $flip) {
             switch (true) {
-                case $extended:
+                case true === $extended:
                     return 'xclass';
-                case 1 === $length:
+                case true === (1 === $length):
                     return 'any';
-                case $negated === $flip:
+                case true === ($negated === $flip):
                     return 'class';
                 default:
                     return 'nclass';
@@ -329,7 +308,7 @@ final class ClassLength
                 // characters, each member its own.
                 if ($caseless && $this->utf) {
                     $this->member = [$first, $second];
-                    [$units, $inMap] = $otherCases[$first.'-'.$second] = $otherCases[$first.'-'.$second] ?? $this->withOtherCasesWritten($first, $second, $restricted, true);
+                    [$units, $inMap] = $otherCases[$first.'-'.$second] ??= $this->withOtherCasesWritten($first, $second, $restricted, true);
                     $items += $units;
                     $map = $map || $inMap;
 
@@ -413,6 +392,7 @@ final class ClassLength
         $map = false;
         $flip = false;
         $properties = 0;
+        $propertyMap = ExtendedClassLength::NO_BYTE;
         $localeMaps = false;
         $complements = [];
         foreach ($members as [$kind, $first, $second]) {
@@ -434,14 +414,19 @@ final class ClassLength
                     continue;
                 }
 
-                $properties++;
+                ++$properties;
+                $propertyMap = self::withProperty($propertyMap, PropertyBytes::ofProperty((string) $first, $caseless, $this->target), (bool) $second);
 
                 continue;
             }
 
             [$name, $negatedMember] = 'type' === $kind ? [Ascii::lower((string) $first), (string) $first !== Ascii::lower((string) $first)] : [(string) $first, (bool) $second];
-            if ($this->ucp && ('type' === $kind ? \in_array($name, ['d', 's', 'w'], true) : (\in_array($name, self::POSIX_PROPERTIES, true) || 'xdigit' === $name))) {
-                $properties++;
+            // UCP reads "\d", "\s", "\w" and the POSIX names but "ascii" and
+            // "blank" as properties.
+            $key = ('type' === $kind ? PropertyBytes::UCP_TYPES : PropertyBytes::UCP_POSIX)[$name] ?? null;
+            if ($this->ucp && null !== $key) {
+                ++$properties;
+                $propertyMap = self::withProperty($propertyMap, PropertyBytes::ofKey($key, $this->target), $negatedMember);
 
                 continue;
             }
@@ -491,7 +476,7 @@ final class ClassLength
             $wide = array_values(array_filter($ranges, static fn (array $range): bool => $range[1] > 0xFF));
         }
 
-        $this->shape = [$properties > 0 || [] !== $wide, $map, $flip, $ranges, $properties, $mapFromProperties, $localeMaps];
+        $this->shape = [$properties > 0 || [] !== $wide, $map, $flip, $ranges, $properties, $mapFromProperties, $localeMaps, $propertyMap];
         if ($properties > 0 || [] !== $wide) {
             $length = 4 + ($map ? 32 : 0) + 3 * $properties;
             if (\count($wide) >= 6) {
@@ -610,7 +595,7 @@ final class ClassLength
 
             if ($member instanceof UnicodePropNode) {
                 $any = 'any' === Ascii::lower(str_replace([' ', '_', '-', '^', '{', '}'], '', $member->prop));
-                $members[] = ['property', $any ? 'any' : 'other', false !== strpos($member->prop, '^')];
+                $members[] = ['property', $any ? 'any' : $member->prop, false !== strpos($member->prop, '^')];
 
                 continue;
             }
@@ -629,22 +614,18 @@ final class ClassLength
     private function codePointOf(NodeInterface $node): ?int
     {
         switch (true) {
-            case $node instanceof LiteralNode && $this->utf && 1 === mb_strlen($node->value, 'UTF-8'):
+            case true === ($node instanceof LiteralNode && $this->utf && 1 === mb_strlen($node->value, 'UTF-8')):
                 $codePoint = (int) mb_ord($node->value, 'UTF-8');
-
                 break;
-            case $node instanceof LiteralNode && !$this->utf && 1 === \strlen($node->value):
+            case true === ($node instanceof LiteralNode && !$this->utf && 1 === \strlen($node->value)):
                 $codePoint = \ord($node->value);
-
                 break;
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 $codePoint = $node->codePoint;
-
                 break;
             default:
                 $codePoint = null;
-
                 break;
         }
 
@@ -723,8 +704,8 @@ final class ClassLength
             }
 
             // A character of a caseless set ends the run.
-            for ($high = $low; $codePoint < $to && !isset(PcreTables::caselessSets()[$codePoint + 1]) && $this->otherCase($codePoint + 1) === $high + 1; $high++) {
-                $codePoint++;
+            for ($high = $low; $codePoint < $to && !isset(PcreTables::caselessSets()[$codePoint + 1]) && $this->otherCase($codePoint + 1) === $high + 1; ++$high) {
+                ++$codePoint;
             }
 
             return [$codePoint + 1, null, $low, $high];
@@ -749,7 +730,7 @@ final class ClassLength
     {
         $ranges = [[$low, $high]];
         if (!$this->utf) {
-            for ($codePoint = $low; $codePoint <= $high; $codePoint++) {
+            for ($codePoint = $low; $codePoint <= $high; ++$codePoint) {
                 $other = $codePoint >= 0x80 && $this->ucp ? $this->otherCase($codePoint) : ((($nullsafeVariable2 = $this->tables) ? $nullsafeVariable2->otherCase($codePoint, $this->target) : null) ?? ($codePoint < 0x80 ? $this->otherCase($codePoint) : $codePoint));
                 if ($other !== $codePoint && $other <= 0xFF) {
                     $ranges[] = [$other, $other];
@@ -799,7 +780,7 @@ final class ClassLength
      */
     private function nextCased(int $from, int $to): ?int
     {
-        for ($codePoint = $from; $codePoint <= min($to, 0xFF); $codePoint++) {
+        for ($codePoint = $from; $codePoint <= min($to, 0xFF); ++$codePoint) {
             if (isset(PcreTables::caselessSets()[$codePoint]) || $this->otherCase($codePoint) !== $codePoint) {
                 return $codePoint;
             }
@@ -844,14 +825,14 @@ final class ClassLength
     {
         $runs = [];
         $count = \count($set);
-        for ($index = 0; $index < $count; $index++) {
+        for ($index = 0; $index < $count; ++$index) {
             if ($set[$index] === $except) {
                 continue;
             }
 
             $first = $set[$index];
             while ($index + 1 < $count && $set[$index] + 1 === $set[$index + 1]) {
-                $index++;
+                ++$index;
             }
 
             $runs[] = [$first, $set[$index]];
@@ -874,11 +855,11 @@ final class ClassLength
         }
 
         switch (true) {
-            case !$utf || 0xD7 === $codePoint || 0xF7 === $codePoint || 0xDF === $codePoint:
+            case true === (!$utf || 0xD7 === $codePoint || 0xF7 === $codePoint || 0xDF === $codePoint):
                 return null;
-            case $codePoint >= 0xC0 && $codePoint <= 0xDE:
+            case true === ($codePoint >= 0xC0 && $codePoint <= 0xDE):
                 return $codePoint + 0x20;
-            case $codePoint >= 0xE0 && $codePoint <= 0xFE:
+            case true === ($codePoint >= 0xE0 && $codePoint <= 0xFE):
                 return $codePoint - 0x20;
             default:
                 return null;
@@ -943,6 +924,37 @@ final class ClassLength
     }
 
     /**
+     * The map of characters below 256 a class sets, with those a property
+     * matches, or turned over those it does not; null once one is not
+     * known.
+     */
+    private static function withProperty(?string $map, ?string $property, bool $negated): ?string
+    {
+        if (null === $map || null === $property) {
+            return null;
+        }
+
+        return $map | ($negated ? ~$property : $property);
+    }
+
+    /**
+     * The map of the characters below 256 of ranges.
+     *
+     * @param list<array{0: int, 1: int}> $ranges
+     */
+    private static function mapOf(array $ranges): string
+    {
+        $map = ExtendedClassLength::NO_BYTE;
+        foreach ($ranges as [$low, $high]) {
+            for ($byte = $low; $byte <= min($high, 0xFF); ++$byte) {
+                $map[$byte >> 3] = \chr(\ord($map[$byte >> 3]) | 1 << ($byte & 7));
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * @param list<array{0: int, 1: int}> $ranges
      *
      * @return list<array{0: int, 1: int}>
@@ -976,11 +988,11 @@ final class ClassLength
             $items = 0;
             while ($start >= $listStart) {
                 if ($start === $end || $end < $listEnd) {
-                    $items++;
+                    ++$items;
                 }
 
                 if ($start < $end && $start > $listStart) {
-                    $items++;
+                    ++$items;
                 }
 
                 if ($index > 0) {
@@ -994,7 +1006,7 @@ final class ClassLength
             }
 
             if ($end >= $listStart && $end < $listEnd) {
-                $items++;
+                ++$items;
             }
 
             $bytes += ($items >= 3 ? $items + 1 : $items) * $size;

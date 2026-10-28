@@ -24,7 +24,7 @@ final class AlternationNode extends AbstractNode
      * @var list<NodeInterface>
      *
      */
-    public $alternatives;
+    public array $alternatives;
 
     /**
      * @param array<NodeInterface> $alternatives Renumbered in the order given

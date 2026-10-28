@@ -30,36 +30,23 @@ final class CaptureKey
      *
      */
     public $key;
-
     /**
-     * @var bool
-     *
      */
-    public $optional;
-
+    public bool $optional;
     /**
      * @var list<CaptureGroupShape>
      *
      */
-    public $groups;
-
+    public array $groups;
     /**
-     * @var bool
-     *
      */
-    public $unset;
-
+    public bool $unset;
     /**
-     * @var bool
-     *
      */
-    public $marks;
-
+    public bool $marks;
     /**
-     * @var bool
-     *
      */
-    public $alwaysSet;
+    public bool $alwaysSet;
 
     /**
      * @param int|string              $key       the group number, 0 for the whole match, or the name

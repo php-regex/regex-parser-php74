@@ -72,17 +72,34 @@ use PHPRegex\Parser\Text\Ascii;
 final class CompiledSize
 {
     /**
+     * The pattern between its delimiters, null for a tree built by hand.
+     *
+     */
+    private ?string $source;
+
+    /**
+     * Whether the "u" flag itself is set: "(*UTF)" alone reads "\d", "\s",
+     * "\w" and the POSIX names as bytes.
+     *
+     */
+    private bool $unicodeFlag;
+
+    /**
+     * Whether the pattern may hold a caseless item, which the ceiling
+     * allows for.
+     *
+     */
+    private bool $caseless;
+    /**
      * What every compiled pattern holds around its body: the end marker,
      * then the opening and closing brackets.
      */
     private const FRAME = 1 + CompiledLength::BRACKETS;
-
     /**
      * A size no pattern reaches: the floor and the ceiling stop growing
      * there.
      */
     private const CAP = 1 << 24;
-
     /**
      * The most units the floor counts for one byte of a pattern that holds
      * no "{", so repeats nothing by a count: a class of two members 33 for
@@ -94,75 +111,25 @@ final class CompiledSize
     private const MAX_UNITS_PER_BYTE_UNCOUNTED = 33;
 
     /**
-     * @var RegexNode
-     *
-     */
-    private $regex;
-
-    /**
-     * @var bool
-     *
-     */
-    private $utf;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
-    /**
-     * The pattern between its delimiters, null for a tree built by hand.
-     *
-     *
-     * @var string|null
-     */
-    private $source;
-
-    /**
-     * Whether the "u" flag itself is set: "(*UTF)" alone reads "\d", "\s",
-     * "\w" and the POSIX names as bytes.
-     *
-     *
-     * @var bool
-     */
-    private $unicodeFlag;
-
-    /**
-     * Whether the pattern may hold a caseless item, which the ceiling
-     * allows for.
-     *
-     *
-     * @var bool
-     */
-    private $caseless;
-
-    /**
      * Whether a capture in the pattern may be wrapped for a reference to
      * itself (up to 10.34), which the ceiling allows for.
      *
-     *
-     * @var bool
      */
-    private $mayWrapCaptures;
+    private bool $mayWrapCaptures;
 
     /**
      * Whether the pattern may hold an inline "a", which keeps types and
      * POSIX names to ASCII under UCP.
      *
-     *
-     * @var bool
      */
-    private $asciiOptions;
+    private bool $asciiOptions;
 
     /**
      * Whether the pattern may be read under UCP, where Unicode folds the
      * bytes past ASCII of a caseless class without UTF.
      *
-     *
-     * @var bool
      */
-    private $ucp;
+    private bool $ucp;
 
     /**
      * Whether each caseless class of bytes measured may hold every byte, by
@@ -170,7 +137,16 @@ final class CompiledSize
      *
      * @var array<string, bool>
      */
-    private $foldsToEveryByte = [];
+    private array $foldsToEveryByte = [];
+    /**
+     */
+    private RegexNode $regex;
+    /**
+     */
+    private bool $utf;
+    /**
+     */
+    private PcreTarget $target;
 
     /**
      * @param RegexNode  $regex  the pattern judged, its source and flags
@@ -280,74 +256,57 @@ final class CompiledSize
     public function floor(NodeInterface $node): int
     {
         switch (true) {
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 $size = $this->floorOfAll($node->children);
-
                 break;
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 $size = $this->floorOfAll($node->alternatives) + CompiledLength::ALTERNATION * (\count($node->alternatives) - 1);
-
                 break;
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 $size = $this->groupFloor($node);
-
                 break;
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 $size = $this->conditionalFloor($node);
-
                 break;
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 $size = $this->repeatedFloor($node);
-
                 break;
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 $size = 2 * mb_strlen($node->value, 'UTF-8');
-
                 break;
-            case $node instanceof BackrefNode:
+            case true === $node instanceof BackrefNode:
                 $size = 2;
-
                 break;
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 $size = 3;
-
                 break;
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 $size = $this->classFloor($node);
-
                 break;
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 $size = $this->unicodeFlag && !$this->asciiOptions && false !== strpos('dDsSwW', $node->value) ? 3 : 1;
-
                 break;
-            case $node instanceof UnicodePropNode:
+            case true === $node instanceof UnicodePropNode:
                 $size = self::isAnyCharacterProperty($node) ? 1 : 3;
-
                 break;
-            case $node instanceof DefineNode:
+            case true === $node instanceof DefineNode:
                 $size = $this->floor($node->content) + CompiledLength::BRACKETS + 1;
-
                 break;
-            case $node instanceof ScriptRunNode:
-                $size = null === $node->content ? 0 : $this->floor($node->content) + ($node->atomic ? 2 : 1) * CompiledLength::BRACKETS;
-
+            case true === $node instanceof ScriptRunNode:
+                $size = null === $node->content ? 0 : $this->floor($node->content) + ($node->isAtomic ? 2 : 1) * CompiledLength::BRACKETS;
                 break;
-            case $node instanceof DotNode:
-            case $node instanceof CharLiteralNode:
+            case true === $node instanceof DotNode:
+            case true === $node instanceof CharLiteralNode:
                 $size = 1;
-
                 break;
-            case $node instanceof CalloutNode:
+            case true === $node instanceof CalloutNode:
                 $size = \is_string($node->identifier) && $node->isStringIdentifier ? 11 + \strlen($node->identifier) : 6;
-
                 break;
-            case $node instanceof PcreVerbNode:
+            case true === $node instanceof PcreVerbNode:
                 $size = 1 === LibraryPcre::match('/^(?:MARK|PRUNE|SKIP|THEN|COMMIT):(.+)$/s', $node->verb, $name) ? 3 + \strlen($name[1]) : 0;
-
                 break;
             default:
                 $size = 0;
-
                 break;
         }
 
@@ -369,86 +328,67 @@ final class CompiledSize
     public function ceiling(NodeInterface $node): int
     {
         switch (true) {
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 $size = $this->ceilingOfAll($node->children);
-
                 break;
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 $size = $this->ceilingOfAll($node->alternatives) + CompiledLength::ALTERNATION * (\count($node->alternatives) - 1);
-
                 break;
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 $size = $this->ceiling($node->child) + $this->groupFrameCeiling($node);
-
                 break;
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 $size = ($node->condition instanceof GroupNode || $node->condition instanceof SequenceNode ? $this->ceiling($node->condition) : 5) + $this->ceiling($node->yes) + $this->ceiling($node->no) + CompiledLength::BRACKETS + CompiledLength::ALTERNATION;
-
                 break;
-            case $node instanceof DefineNode:
+            case true === $node instanceof DefineNode:
                 $size = $this->ceiling($node->content) + CompiledLength::BRACKETS + 1;
-
                 break;
-            case $node instanceof ScriptRunNode:
+            case true === $node instanceof ScriptRunNode:
                 $size = (null === $node->content ? 0 : $this->ceiling($node->content)) + 2 * CompiledLength::BRACKETS;
-
                 break;
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 $size = $this->repeatedCeiling($node);
-
                 break;
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 $size = 2 * \strlen($node->value) + ($this->caseless ? self::caselessSetBytes($node->value) : 0);
-
                 break;
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 $size = 5;
-
                 break;
-            case $node instanceof DotNode:
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof DotNode:
+            case true === $node instanceof CharTypeNode:
                 $size = 3;
-
                 break;
-            case $node instanceof UnicodePropNode:
+            case true === $node instanceof UnicodePropNode:
                 $size = false !== strpos($node->prop, '^') ? 33 : 3;
-
                 break;
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 $size = $this->classCeiling($node);
-
                 break;
-            case $node instanceof BackrefNode:
+            case true === $node instanceof BackrefNode:
                 $size = 6;
-
                 break;
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 $size = 3 + 3 * \count($node->returnedGroups);
-
                 break;
-            case $node instanceof CalloutNode:
+            case true === $node instanceof CalloutNode:
                 $size = 9 + $node->getEndPosition() - $node->getStartPosition();
-
                 break;
-            case $node instanceof PcreVerbNode:
+            case true === $node instanceof PcreVerbNode:
                 $size = 4 + \strlen($node->verb) + (0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT')) ? 750 : 0) + (0 === substr_compare($node->verb, ':', -strlen(':')) ? 2 * CompiledLength::BRACKETS : 0);
-
                 break;
-            case $node instanceof AnchorNode:
-            case $node instanceof AssertionNode:
-            case $node instanceof KeepNode:
+            case true === $node instanceof AnchorNode:
+            case true === $node instanceof AssertionNode:
+            case true === $node instanceof KeepNode:
                 $size = 1;
-
                 break;
-            case $node instanceof CommentNode:
-            case $node instanceof LimitMatchNode:
+            case true === $node instanceof CommentNode:
+            case true === $node instanceof LimitMatchNode:
                 $size = 0;
-
                 break;
             default:
                 $size = self::CAP;
-
                 break;
         }
 
@@ -570,15 +510,15 @@ final class CompiledSize
         if ($member instanceof CharTypeNode) {
             $spaces = false !== strpos('hHvV', $member->value);
 
-            return [(static function () use ($member) {
-                switch ($member->value) {
-                    case 'h':
+            return [(function () use ($member) {
+                switch (true) {
+                    case 'h' === $member->value:
                         return 27;
-                    case 'H':
+                    case 'H' === $member->value:
                         return 49;
-                    case 'v':
+                    case 'v' === $member->value:
                         return 7;
-                    case 'V':
+                    case 'V' === $member->value:
                         return 14;
                     default:
                         return 3;
@@ -623,9 +563,9 @@ final class CompiledSize
         if (!$item instanceof GroupNode && !$item instanceof ConditionalNode && !$item instanceof DefineNode && !$item instanceof ScriptRunNode
             && !$item instanceof SubroutineNode && !$item instanceof PcreVerbNode) {
             switch (true) {
-                case 0 === $max || (1 === $min && 1 === $max):
+                case true === (0 === $max || 1 === $min && 1 === $max):
                     return $copy;
-                case $short:
+                case true === $short:
                     return $copy + 1;
                 default:
                     return 2 * $copy + 6;
@@ -789,7 +729,7 @@ final class CompiledSize
         $tables = CharacterTables::forLocale($this->target->locale);
         $held = [];
         foreach ($ranges as [$low, $high]) {
-            for ($byte = $low; $byte <= min($high, 0xFF); $byte++) {
+            for ($byte = $low; $byte <= min($high, 0xFF); ++$byte) {
                 $held[$byte] = $held[$tables->otherCase($byte, $this->target)] = true;
                 // Unicode gives a Latin-1 letter its other case below 256,
                 // but for the micro sign, the sharp s and the y with a
@@ -810,11 +750,11 @@ final class CompiledSize
     private function classCodePoint(NodeInterface $member): ?int
     {
         switch (true) {
-            case $member instanceof LiteralNode && $this->utf && 1 === mb_strlen($member->value, 'UTF-8'):
+            case true === ($member instanceof LiteralNode && $this->utf && 1 === mb_strlen($member->value, 'UTF-8')):
                 return (int) mb_ord($member->value, 'UTF-8');
-            case $member instanceof LiteralNode && !$this->utf && 1 === \strlen($member->value):
+            case true === ($member instanceof LiteralNode && !$this->utf && 1 === \strlen($member->value)):
                 return \ord($member->value);
-            case $member instanceof CharLiteralNode:
+            case true === $member instanceof CharLiteralNode:
                 return $member->codePoint;
             default:
                 return null;
@@ -849,12 +789,12 @@ final class CompiledSize
     private function groupBrackets(GroupNode $node, int $body): int
     {
         switch (true) {
-            case self::isLookaround($node) && 0 === $body:
+            case true === (self::isLookaround($node) && 0 === $body):
                 return 0;
-            case GroupType::InlineFlags() === $node->type && $node->child instanceof LiteralNode && '' === $node->child->value && (null === $this->source || InlineFlags::setOptionsOnly($this->source, $node->startPosition)):
+            case true === (GroupType::InlineFlags() === $node->type && $node->child instanceof LiteralNode && '' === $node->child->value && (null === $this->source || InlineFlags::setOptionsOnly($this->source, $node->startPosition))):
                 return 0;
-            case GroupType::Capturing() === $node->type:
-            case GroupType::Named() === $node->type:
+            case true === (GroupType::Capturing() === $node->type):
+            case true === (GroupType::Named() === $node->type):
                 return CompiledLength::BRACKETS + 2;
             default:
                 return CompiledLength::BRACKETS;

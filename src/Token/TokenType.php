@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Token;
 
 /**
- * Cached-instance twin of the TokenType enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The TokenType enum as a class of shared instances: TokenType::Literal() returns
+ * the same instance at each call.
  */
-final class TokenType
+final class TokenType implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,290 +25,162 @@ final class TokenType
 
     public static function Literal(): self
     {
-        if (!isset(self::$instances['Literal'])) {
-            self::$instances['Literal'] = new self('Literal', 'literal');
-        }
-
-        return self::$instances['Literal'];
+        return self::$instances['Literal'] ??= new self('Literal', 'literal');
     }
 
     public static function CharType(): self
     {
-        if (!isset(self::$instances['CharType'])) {
-            self::$instances['CharType'] = new self('CharType', 'char_type');
-        }
-
-        return self::$instances['CharType'];
+        return self::$instances['CharType'] ??= new self('CharType', 'char_type');
     }
 
     public static function GroupOpen(): self
     {
-        if (!isset(self::$instances['GroupOpen'])) {
-            self::$instances['GroupOpen'] = new self('GroupOpen', 'group_open');
-        }
-
-        return self::$instances['GroupOpen'];
+        return self::$instances['GroupOpen'] ??= new self('GroupOpen', 'group_open');
     }
 
     public static function GroupClose(): self
     {
-        if (!isset(self::$instances['GroupClose'])) {
-            self::$instances['GroupClose'] = new self('GroupClose', 'group_close');
-        }
-
-        return self::$instances['GroupClose'];
+        return self::$instances['GroupClose'] ??= new self('GroupClose', 'group_close');
     }
 
     public static function GroupModifierOpen(): self
     {
-        if (!isset(self::$instances['GroupModifierOpen'])) {
-            self::$instances['GroupModifierOpen'] = new self('GroupModifierOpen', 'group_modifier_open');
-        }
-
-        return self::$instances['GroupModifierOpen'];
+        return self::$instances['GroupModifierOpen'] ??= new self('GroupModifierOpen', 'group_modifier_open');
     }
 
     public static function CharClassOpen(): self
     {
-        if (!isset(self::$instances['CharClassOpen'])) {
-            self::$instances['CharClassOpen'] = new self('CharClassOpen', 'char_class_open');
-        }
-
-        return self::$instances['CharClassOpen'];
+        return self::$instances['CharClassOpen'] ??= new self('CharClassOpen', 'char_class_open');
     }
 
     public static function CharClassClose(): self
     {
-        if (!isset(self::$instances['CharClassClose'])) {
-            self::$instances['CharClassClose'] = new self('CharClassClose', 'char_class_close');
-        }
-
-        return self::$instances['CharClassClose'];
+        return self::$instances['CharClassClose'] ??= new self('CharClassClose', 'char_class_close');
     }
 
     public static function Quantifier(): self
     {
-        if (!isset(self::$instances['Quantifier'])) {
-            self::$instances['Quantifier'] = new self('Quantifier', 'quantifier');
-        }
-
-        return self::$instances['Quantifier'];
+        return self::$instances['Quantifier'] ??= new self('Quantifier', 'quantifier');
     }
 
     public static function Alternation(): self
     {
-        if (!isset(self::$instances['Alternation'])) {
-            self::$instances['Alternation'] = new self('Alternation', 'alternation');
-        }
-
-        return self::$instances['Alternation'];
+        return self::$instances['Alternation'] ??= new self('Alternation', 'alternation');
     }
 
     public static function Dot(): self
     {
-        if (!isset(self::$instances['Dot'])) {
-            self::$instances['Dot'] = new self('Dot', 'dot');
-        }
-
-        return self::$instances['Dot'];
+        return self::$instances['Dot'] ??= new self('Dot', 'dot');
     }
 
     public static function Anchor(): self
     {
-        if (!isset(self::$instances['Anchor'])) {
-            self::$instances['Anchor'] = new self('Anchor', 'anchor');
-        }
-
-        return self::$instances['Anchor'];
+        return self::$instances['Anchor'] ??= new self('Anchor', 'anchor');
     }
 
     public static function Eof(): self
     {
-        if (!isset(self::$instances['Eof'])) {
-            self::$instances['Eof'] = new self('Eof', 'eof');
-        }
-
-        return self::$instances['Eof'];
+        return self::$instances['Eof'] ??= new self('Eof', 'eof');
     }
 
     public static function Range(): self
     {
-        if (!isset(self::$instances['Range'])) {
-            self::$instances['Range'] = new self('Range', 'range');
-        }
-
-        return self::$instances['Range'];
+        return self::$instances['Range'] ??= new self('Range', 'range');
     }
 
     public static function Negation(): self
     {
-        if (!isset(self::$instances['Negation'])) {
-            self::$instances['Negation'] = new self('Negation', 'negation');
-        }
-
-        return self::$instances['Negation'];
+        return self::$instances['Negation'] ??= new self('Negation', 'negation');
     }
 
     public static function Backref(): self
     {
-        if (!isset(self::$instances['Backref'])) {
-            self::$instances['Backref'] = new self('Backref', 'backref');
-        }
-
-        return self::$instances['Backref'];
+        return self::$instances['Backref'] ??= new self('Backref', 'backref');
     }
 
     public static function Unicode(): self
     {
-        if (!isset(self::$instances['Unicode'])) {
-            self::$instances['Unicode'] = new self('Unicode', 'unicode');
-        }
-
-        return self::$instances['Unicode'];
+        return self::$instances['Unicode'] ??= new self('Unicode', 'unicode');
     }
 
     public static function PosixClass(): self
     {
-        if (!isset(self::$instances['PosixClass'])) {
-            self::$instances['PosixClass'] = new self('PosixClass', 'posix_class');
-        }
-
-        return self::$instances['PosixClass'];
+        return self::$instances['PosixClass'] ??= new self('PosixClass', 'posix_class');
     }
 
     public static function Assertion(): self
     {
-        if (!isset(self::$instances['Assertion'])) {
-            self::$instances['Assertion'] = new self('Assertion', 'assertion');
-        }
-
-        return self::$instances['Assertion'];
+        return self::$instances['Assertion'] ??= new self('Assertion', 'assertion');
     }
 
     public static function UnicodeProp(): self
     {
-        if (!isset(self::$instances['UnicodeProp'])) {
-            self::$instances['UnicodeProp'] = new self('UnicodeProp', 'unicode_prop');
-        }
-
-        return self::$instances['UnicodeProp'];
+        return self::$instances['UnicodeProp'] ??= new self('UnicodeProp', 'unicode_prop');
     }
 
     public static function Octal(): self
     {
-        if (!isset(self::$instances['Octal'])) {
-            self::$instances['Octal'] = new self('Octal', 'octal');
-        }
-
-        return self::$instances['Octal'];
+        return self::$instances['Octal'] ??= new self('Octal', 'octal');
     }
 
     public static function OctalLegacy(): self
     {
-        if (!isset(self::$instances['OctalLegacy'])) {
-            self::$instances['OctalLegacy'] = new self('OctalLegacy', 'octal_legacy');
-        }
-
-        return self::$instances['OctalLegacy'];
+        return self::$instances['OctalLegacy'] ??= new self('OctalLegacy', 'octal_legacy');
     }
 
     public static function CommentOpen(): self
     {
-        if (!isset(self::$instances['CommentOpen'])) {
-            self::$instances['CommentOpen'] = new self('CommentOpen', 'comment_open');
-        }
-
-        return self::$instances['CommentOpen'];
+        return self::$instances['CommentOpen'] ??= new self('CommentOpen', 'comment_open');
     }
 
     public static function PcreVerb(): self
     {
-        if (!isset(self::$instances['PcreVerb'])) {
-            self::$instances['PcreVerb'] = new self('PcreVerb', 'pcre_verb');
-        }
-
-        return self::$instances['PcreVerb'];
+        return self::$instances['PcreVerb'] ??= new self('PcreVerb', 'pcre_verb');
     }
 
     public static function GReference(): self
     {
-        if (!isset(self::$instances['GReference'])) {
-            self::$instances['GReference'] = new self('GReference', 'g_reference');
-        }
-
-        return self::$instances['GReference'];
+        return self::$instances['GReference'] ??= new self('GReference', 'g_reference');
     }
 
     public static function Keep(): self
     {
-        if (!isset(self::$instances['Keep'])) {
-            self::$instances['Keep'] = new self('Keep', 'keep');
-        }
-
-        return self::$instances['Keep'];
+        return self::$instances['Keep'] ??= new self('Keep', 'keep');
     }
 
     public static function LiteralEscaped(): self
     {
-        if (!isset(self::$instances['LiteralEscaped'])) {
-            self::$instances['LiteralEscaped'] = new self('LiteralEscaped', 'literal_escaped');
-        }
-
-        return self::$instances['LiteralEscaped'];
+        return self::$instances['LiteralEscaped'] ??= new self('LiteralEscaped', 'literal_escaped');
     }
 
     public static function QuoteModeStart(): self
     {
-        if (!isset(self::$instances['QuoteModeStart'])) {
-            self::$instances['QuoteModeStart'] = new self('QuoteModeStart', 'quote_mode_start');
-        }
-
-        return self::$instances['QuoteModeStart'];
+        return self::$instances['QuoteModeStart'] ??= new self('QuoteModeStart', 'quote_mode_start');
     }
 
     public static function QuoteModeEnd(): self
     {
-        if (!isset(self::$instances['QuoteModeEnd'])) {
-            self::$instances['QuoteModeEnd'] = new self('QuoteModeEnd', 'quote_mode_end');
-        }
-
-        return self::$instances['QuoteModeEnd'];
+        return self::$instances['QuoteModeEnd'] ??= new self('QuoteModeEnd', 'quote_mode_end');
     }
 
     public static function Callout(): self
     {
-        if (!isset(self::$instances['Callout'])) {
-            self::$instances['Callout'] = new self('Callout', 'callout');
-        }
-
-        return self::$instances['Callout'];
+        return self::$instances['Callout'] ??= new self('Callout', 'callout');
     }
 
     public static function UnicodeNamed(): self
     {
-        if (!isset(self::$instances['UnicodeNamed'])) {
-            self::$instances['UnicodeNamed'] = new self('UnicodeNamed', 'unicode_named');
-        }
-
-        return self::$instances['UnicodeNamed'];
+        return self::$instances['UnicodeNamed'] ??= new self('UnicodeNamed', 'unicode_named');
     }
 
     public static function ControlChar(): self
     {
-        if (!isset(self::$instances['ControlChar'])) {
-            self::$instances['ControlChar'] = new self('ControlChar', 'control_char');
-        }
-
-        return self::$instances['ControlChar'];
+        return self::$instances['ControlChar'] ??= new self('ControlChar', 'control_char');
     }
 
     public static function ExtendedClass(): self
     {
-        if (!isset(self::$instances['ExtendedClass'])) {
-            self::$instances['ExtendedClass'] = new self('ExtendedClass', 'extended_class');
-        }
-
-        return self::$instances['ExtendedClass'];
+        return self::$instances['ExtendedClass'] ??= new self('ExtendedClass', 'extended_class');
     }
 
     /**
@@ -372,13 +226,12 @@ final class TokenType
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Token\\TokenType');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for TokenType.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

@@ -29,20 +29,12 @@ use PHPRegex\Parser\Node\RegexNode;
 final class FilesystemCache implements RemovableCacheInterface
 {
     /**
-     *
-     * @var string
      */
-    private $directory;
+    private string $directory;
 
-    /**
-     * @var int
-     */
-    private $hits = 0;
+    private int $hits = 0;
 
-    /**
-     * @var int
-     */
-    private $misses = 0;
+    private int $misses = 0;
 
     public function __construct(string $directory)
     {

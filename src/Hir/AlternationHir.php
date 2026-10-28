@@ -24,7 +24,7 @@ final class AlternationHir extends Hir
      * @var non-empty-list<Hir>
      *
      */
-    public $branches;
+    public array $branches;
 
     /**
      * @param non-empty-list<Hir> $branches

@@ -2,124 +2,67 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Hir;
 
 /**
- * Cached-instance twin of the AssertionKind enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The AssertionKind enum as a class of shared instances: AssertionKind::SubjectStart() returns
+ * the same instance at each call.
  */
-final class AssertionKind
+final class AssertionKind implements \PHPRegex\Parser\UnitEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
-
-    private function __construct(string $name, string $value)
+    private function __construct(string $name)
     {
         $this->name = $name;
-        $this->value = $value;
     }
 
     public static function SubjectStart(): self
     {
-        if (!isset(self::$instances['SubjectStart'])) {
-            self::$instances['SubjectStart'] = new self('SubjectStart', 'SubjectStart');
-        }
-
-        return self::$instances['SubjectStart'];
+        return self::$instances['SubjectStart'] ??= new self('SubjectStart');
     }
 
     public static function LineStart(): self
     {
-        if (!isset(self::$instances['LineStart'])) {
-            self::$instances['LineStart'] = new self('LineStart', 'LineStart');
-        }
-
-        return self::$instances['LineStart'];
+        return self::$instances['LineStart'] ??= new self('LineStart');
     }
 
     public static function SubjectEnd(): self
     {
-        if (!isset(self::$instances['SubjectEnd'])) {
-            self::$instances['SubjectEnd'] = new self('SubjectEnd', 'SubjectEnd');
-        }
-
-        return self::$instances['SubjectEnd'];
+        return self::$instances['SubjectEnd'] ??= new self('SubjectEnd');
     }
 
     public static function EndOrFinalNewline(): self
     {
-        if (!isset(self::$instances['EndOrFinalNewline'])) {
-            self::$instances['EndOrFinalNewline'] = new self('EndOrFinalNewline', 'EndOrFinalNewline');
-        }
-
-        return self::$instances['EndOrFinalNewline'];
+        return self::$instances['EndOrFinalNewline'] ??= new self('EndOrFinalNewline');
     }
 
     public static function LineEnd(): self
     {
-        if (!isset(self::$instances['LineEnd'])) {
-            self::$instances['LineEnd'] = new self('LineEnd', 'LineEnd');
-        }
-
-        return self::$instances['LineEnd'];
+        return self::$instances['LineEnd'] ??= new self('LineEnd');
     }
 
     public static function MatchStart(): self
     {
-        if (!isset(self::$instances['MatchStart'])) {
-            self::$instances['MatchStart'] = new self('MatchStart', 'MatchStart');
-        }
-
-        return self::$instances['MatchStart'];
+        return self::$instances['MatchStart'] ??= new self('MatchStart');
     }
 
     public static function WordBoundary(): self
     {
-        if (!isset(self::$instances['WordBoundary'])) {
-            self::$instances['WordBoundary'] = new self('WordBoundary', 'WordBoundary');
-        }
-
-        return self::$instances['WordBoundary'];
+        return self::$instances['WordBoundary'] ??= new self('WordBoundary');
     }
 
     public static function NotWordBoundary(): self
     {
-        if (!isset(self::$instances['NotWordBoundary'])) {
-            self::$instances['NotWordBoundary'] = new self('NotWordBoundary', 'NotWordBoundary');
-        }
-
-        return self::$instances['NotWordBoundary'];
+        return self::$instances['NotWordBoundary'] ??= new self('NotWordBoundary');
     }
 
     public static function ResetMatchStart(): self
     {
-        if (!isset(self::$instances['ResetMatchStart'])) {
-            self::$instances['ResetMatchStart'] = new self('ResetMatchStart', 'ResetMatchStart');
-        }
-
-        return self::$instances['ResetMatchStart'];
+        return self::$instances['ResetMatchStart'] ??= new self('ResetMatchStart');
     }
 
     /**

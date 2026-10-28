@@ -24,10 +24,8 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class LimitMatchNode extends AbstractNode
 {
     /**
-     *
-     * @var int
      */
-    public $limit;
+    public int $limit;
 
     public function __construct(
         int $limit,

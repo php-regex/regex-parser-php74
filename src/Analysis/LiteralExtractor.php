@@ -37,7 +37,6 @@ use PHPRegex\Parser\Node\LimitMatchNode;
 use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
@@ -61,14 +60,27 @@ final class LiteralExtractor extends AbstractNodeVisitor
     private const MAX_LITERALS_COUNT = 128;
 
     /**
-     * @var bool
+     * @var list<GroupType>|null
      */
-    private $caseInsensitive = false;
+    private static ?array $LOOKAROUNDS = null;
 
     /**
-     * @var bool
+     * @return list<GroupType>
      */
-    private $unicode = false;
+    private static function LOOKAROUNDS(): array
+    {
+        return self::$LOOKAROUNDS ??= [
+            GroupType::LookaheadPositive(),
+            GroupType::LookaheadNegative(),
+            GroupType::LookbehindPositive(),
+            GroupType::LookbehindNegative(),
+            GroupType::ScanSubstring(),
+        ];
+    }
+
+    private bool $caseInsensitive = false;
+
+    private bool $unicode = false;
 
     #[\Override]
     public function visitRegex(RegexNode $node): LiteralSet
@@ -160,7 +172,7 @@ final class LiteralExtractor extends AbstractNodeVisitor
     #[\Override]
     public function visitQuantifier(QuantifierNode $node): LiteralSet
     {
-        $bounds = QuantifierBounds::parse($node->quantifier);
+        $bounds = $node->bounds;
 
         // Case 1: Exact quantifier {n} -> repeat literals n times
         if (null !== $bounds && $bounds->min === $bounds->max) {
@@ -178,7 +190,7 @@ final class LiteralExtractor extends AbstractNodeVisitor
             // period, whatever the count.
             $result = $childSet;
             $seen = [];
-            for ($i = 1; $i < $count; $i++) {
+            for ($i = 1; $i < $count; ++$i) {
                 $result = $result->concat($childSet);
                 if (\count($result->prefixes) > self::MAX_LITERALS_COUNT) {
                     return LiteralSet::empty();
@@ -187,7 +199,7 @@ final class LiteralExtractor extends AbstractNodeVisitor
                 $state = hash('md5', serialize([$result->prefixes, $result->suffixes, $result->complete]));
                 if (isset($seen[$state])) {
                     $left = ($count - 1 - $i) % ($i - $seen[$state]);
-                    for ($j = 0; $j < $left; $j++) {
+                    for ($j = 0; $j < $left; ++$j) {
                         $result = $result->concat($childSet);
                     }
 
@@ -377,7 +389,7 @@ final class LiteralExtractor extends AbstractNodeVisitor
     public function visitPcreVerb(PcreVerbNode $node): LiteralSet
     {
         // "(*ACCEPT)" ends the match: what follows it may not be matched.
-        if (0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT'))) {
+        if ('ACCEPT' === $node->name) {
             return new LiteralSet([''], [], false);
         }
 
@@ -402,22 +414,6 @@ final class LiteralExtractor extends AbstractNodeVisitor
     {
         // Callouts do not match characters, so they don't contribute to literal extraction.
         return LiteralSet::fromString('');
-    }
-
-    private static function LOOKAROUNDS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                GroupType::LookaheadPositive(),
-                GroupType::LookaheadNegative(),
-                GroupType::LookbehindPositive(),
-                GroupType::LookbehindNegative(),
-                GroupType::ScanSubstring(),
-            ];
-        }
-
-        return $cache;
     }
 
     /**
@@ -450,7 +446,7 @@ final class LiteralExtractor extends AbstractNodeVisitor
         }
 
         $results = [''];
-        for ($i = 0; $i < \strlen($value); $i++) {
+        for ($i = 0; $i < \strlen($value); ++$i) {
             $char = $value[$i];
             $lower = Ascii::lower($char);
             $upper = Ascii::upper($char);

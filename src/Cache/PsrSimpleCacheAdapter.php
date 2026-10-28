@@ -23,33 +23,27 @@ use Psr\SimpleCache\CacheInterface;
  */
 final class PsrSimpleCacheAdapter implements RemovableCacheInterface
 {
-    /**
-     *
-     * @var \Psr\SimpleCache\CacheInterface
-     */
-    private $cache;
+    private int $hits = 0;
+
+    private int $misses = 0;
 
     /**
+     * The keys this adapter wrote, the ones clear() removes.
      *
-     * @var string
+     * @var array<string, true>
      */
-    private $prefix = 'regex_';
-
+    private array $written = [];
+    /**
+     */
+    private CacheInterface $cache;
+    /**
+     */
+    private string $prefix = 'regex_';
     /**
      * @var \Closure(string):mixed|null
      *
      */
-    private $keyFactory;
-
-    /**
-     * @var int
-     */
-    private $hits = 0;
-
-    /**
-     * @var int
-     */
-    private $misses = 0;
+    private ?\Closure $keyFactory = null;
 
     /**
      * @param (\Closure(string): mixed)|null $keyFactory receives the seed generateKey() gets and
@@ -77,6 +71,7 @@ final class PsrSimpleCacheAdapter implements RemovableCacheInterface
     public function write(string $key, RegexNode $ast): void
     {
         $this->cache->set($key, AstSerializer::serialize($ast));
+        $this->written[$key] = true;
     }
 
     public function load(string $key): ?RegexNode
@@ -89,9 +84,18 @@ final class PsrSimpleCacheAdapter implements RemovableCacheInterface
         return $ast;
     }
 
+    /**
+     * Removes the trees this adapter wrote, never another entry: the cache
+     * may be the application's. A tree another process wrote stays, as
+     * valid as it was; clear a cache of the library's own to drop them too.
+     */
     public function clear(): void
     {
-        $this->cache->clear();
+        if ([] !== $this->written) {
+            $this->cache->deleteMultiple(array_keys($this->written));
+        }
+
+        $this->written = [];
     }
 
     public function getStats(): array

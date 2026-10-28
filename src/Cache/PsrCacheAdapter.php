@@ -23,33 +23,27 @@ use Psr\Cache\CacheItemPoolInterface;
  */
 final class PsrCacheAdapter implements RemovableCacheInterface
 {
-    /**
-     *
-     * @var \Psr\Cache\CacheItemPoolInterface
-     */
-    private $pool;
+    private int $hits = 0;
+
+    private int $misses = 0;
 
     /**
+     * The keys this adapter wrote, the ones clear() removes.
      *
-     * @var string
+     * @var array<string, true>
      */
-    private $prefix = 'regex_';
-
+    private array $written = [];
+    /**
+     */
+    private CacheItemPoolInterface $pool;
+    /**
+     */
+    private string $prefix = 'regex_';
     /**
      * @var \Closure(string):mixed|null
      *
      */
-    private $keyFactory;
-
-    /**
-     * @var int
-     */
-    private $hits = 0;
-
-    /**
-     * @var int
-     */
-    private $misses = 0;
+    private ?\Closure $keyFactory = null;
 
     /**
      * @param (\Closure(string): mixed)|null $keyFactory receives the seed generateKey() gets and
@@ -77,6 +71,7 @@ final class PsrCacheAdapter implements RemovableCacheInterface
     public function write(string $key, RegexNode $ast): void
     {
         $this->pool->save($this->pool->getItem($key)->set(AstSerializer::serialize($ast)));
+        $this->written[$key] = true;
     }
 
     public function load(string $key): ?RegexNode
@@ -90,9 +85,18 @@ final class PsrCacheAdapter implements RemovableCacheInterface
         return $ast;
     }
 
+    /**
+     * Removes the trees this adapter wrote, never another entry: the pool
+     * may be the application's. A tree another process wrote stays, as
+     * valid as it was; clear a pool of the library's own to drop them too.
+     */
     public function clear(): void
     {
-        $this->pool->clear();
+        if ([] !== $this->written) {
+            $this->pool->deleteItems(array_keys($this->written));
+        }
+
+        $this->written = [];
     }
 
     public function getStats(): array

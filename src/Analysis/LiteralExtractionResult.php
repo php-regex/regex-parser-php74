@@ -22,25 +22,18 @@ final class LiteralExtractionResult
      * @var array<string>
      *
      */
-    public $literals;
-
+    public array $literals;
     /**
      * @var array<string>
      *
      */
-    public $patterns;
-
+    public array $patterns;
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\LiteralConfidence
      */
-    public $confidence;
-
+    public LiteralConfidence $confidence;
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\LiteralSet
      */
-    public $literalSet;
+    public LiteralSet $literalSet;
 
     /**
      * @internal built by Regex::literals()
@@ -48,7 +41,7 @@ final class LiteralExtractionResult
      * @param array<string> $literals
      * @param array<string> $patterns
      */
-    public function __construct(array $literals, array $patterns, $confidence, LiteralSet $literalSet)
+    public function __construct(array $literals, array $patterns, LiteralConfidence $confidence, LiteralSet $literalSet)
     {
         $this->literals = $literals;
         $this->patterns = $patterns;

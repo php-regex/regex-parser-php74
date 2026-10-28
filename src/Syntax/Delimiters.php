@@ -28,7 +28,9 @@ final class Delimiters
      */
     public const BRACKETS = ['(' => ')', '[' => ']', '{' => '}', '<' => '>'];
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * The delimiter that closes a pattern opened with $delimiter.

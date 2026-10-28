@@ -34,14 +34,14 @@ final class StaticCaches
      *
      * @var array<string, \Closure(): void>
      */
-    private static $clearers = [];
+    private static array $clearers = [];
 
     /**
      * @param \Closure(): void $clear
      */
     public static function register(string $owner, \Closure $clear): void
     {
-        self::$clearers[$owner] = self::$clearers[$owner] ?? $clear;
+        self::$clearers[$owner] ??= $clear;
     }
 
     public static function clear(): void

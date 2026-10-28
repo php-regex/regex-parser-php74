@@ -24,7 +24,9 @@ final class NullCache implements RemovableCacheInterface
     }
 
     #[\Override]
-    public function write(string $key, RegexNode $ast): void {}
+    public function write(string $key, RegexNode $ast): void
+    {
+    }
 
     #[\Override]
     public function load(string $key): ?RegexNode
@@ -33,7 +35,9 @@ final class NullCache implements RemovableCacheInterface
     }
 
     #[\Override]
-    public function clear(): void {}
+    public function clear(): void
+    {
+    }
 
     #[\Override]
     public function getStats(): array

@@ -21,16 +21,11 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class RangeNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $start;
-
+    public NodeInterface $start;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $end;
+    public NodeInterface $end;
 
     public function __construct(
         NodeInterface $start,

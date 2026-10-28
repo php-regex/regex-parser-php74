@@ -41,16 +41,12 @@ use PHPRegex\Parser\Syntax\Delimiters;
 final class PatternFormatter
 {
     /**
-     *
-     * @var int
      */
-    private $width;
+    private int $width;
 
     /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
      */
-    private $target;
+    private PcreTarget $target;
 
     /**
      * @param int             $width  the width a line aims at, indent included:

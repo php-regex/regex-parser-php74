@@ -29,8 +29,11 @@ use PHPRegex\Parser\Node\SequenceNode;
 use PHPRegex\Parser\Node\SubroutineNode;
 use PHPRegex\Parser\Node\VersionConditionNode;
 use PHPRegex\Parser\PcreFeature;
+use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\Text\Ascii;
+use PHPRegex\Parser\Text\Utf8;
 use PHPRegex\Parser\Token\Token;
+use PHPRegex\Parser\Token\TokenStream;
 use PHPRegex\Parser\Token\TokenType;
 
 /**
@@ -51,70 +54,50 @@ use PHPRegex\Parser\Token\TokenType;
 final class ConditionParser
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Syntax\ParseState
      */
-    private $state;
-
+    private TokenStream $stream;
     /**
-     *
-     * @var \PHPRegex\Parser\Syntax\GroupNameReader
      */
-    private $groupNames;
-
+    private string $pattern;
+    /**
+     */
+    private PcreTarget $target;
+    /**
+     */
+    private ParseState $state;
+    /**
+     */
+    private GroupNameReader $groupNames;
     /**
      * @var list<string>
      *
      */
-    private $patternNames;
-
+    private array $patternNames;
     /**
      * @var \Closure():NodeInterface
      *
      */
-    private $branches;
-
+    private \Closure $branches;
     /**
      * @var \Closure(int, bool):?GroupNode
      *
      */
-    private $lookaround;
-
+    private \Closure $lookaround;
     /**
      * @var \Closure(Token, int):NodeInterface
      *
      */
-    private $verb;
-
+    private \Closure $verb;
     /**
      * @var \Closure():int
      *
      */
-    private $skipTrivia;
-
+    private \Closure $skipTrivia;
     /**
      * @var \Closure(string):void
      *
      */
-    private $recursionTest;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\Token\TokenStream
-     */
-    private $stream;
-
-    /**
-     *
-     * @var string
-     */
-    private $pattern;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
-     */
-    private $target;
+    private \Closure $recursionTest;
 
     /**
      * @param list<string>                        $patternNames  every name the pattern gives a group, once a
@@ -156,7 +139,7 @@ final class ConditionParser
     /**
      * Parses conditional constructs (?(condition)...).
      *
-     * @return \PHPRegex\Parser\Node\ConditionalNode|\PHPRegex\Parser\Node\DefineNode
+     * @return ConditionalNode|DefineNode
      */
     public function conditional(int $startPosition, bool $isModifier, int $groupsBefore)
     {
@@ -211,7 +194,7 @@ final class ConditionParser
             $skipped = ($this->skipTrivia)();
             if ($this->stream->match(TokenType::CommentOpen())) {
                 $this->state->comment();
-                $skipped++;
+                ++$skipped;
             }
         } while ($skipped > 0);
 
@@ -229,11 +212,7 @@ final class ConditionParser
         } elseif (!$this->stream->match(TokenType::GroupModifierOpen())) {
             $position = $this->calloutConditionErrorOffset();
 
-            throw $this->state->error(
-                \sprintf('Invalid conditional condition at position %d: a callout in a condition must be followed by an assertion.', $position),
-                ErrorCode::ConditionalAssertionExpected(),
-                $position,
-            );
+            throw $this->state->error(\sprintf('Invalid conditional condition at position %d: a callout in a condition must be followed by an assertion.', $position), ErrorCode::ConditionalAssertionExpected(), $position);
         } else {
             // A group that is no assertion is refused where it starts, as
             // anything else there is.
@@ -272,7 +251,7 @@ final class ConditionParser
             $skipped = ($this->skipTrivia)();
             if ($this->stream->match(TokenType::CommentOpen())) {
                 $this->state->comment();
-                $skipped++;
+                ++$skipped;
             }
         } while ($skipped > 0);
 
@@ -297,11 +276,7 @@ final class ConditionParser
             return $this->readBranches($startPosition, $this->lookaroundCondition($groupStart));
         }
 
-        throw $this->state->error(
-            \sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $position),
-            ErrorCode::ConditionalAssertionExpected(),
-            $position,
-        );
+        throw $this->state->error(\sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $position), ErrorCode::ConditionalAssertionExpected(), $position);
     }
 
     /**
@@ -341,10 +316,10 @@ final class ConditionParser
 
         $token = $this->stream->current();
 
-        switch ($token->type) {
-            case TokenType::QuoteModeStart():
+        switch (true) {
+            case $token->type === TokenType::QuoteModeStart():
                 return $token->position;
-            case TokenType::Literal():
+            case $token->type === TokenType::Literal():
                 return $token->position + \strlen($this->firstCharacterOf($token));
             default:
                 return $token->position + 1;
@@ -397,11 +372,7 @@ final class ConditionParser
             ? $verbToken->position + 2 + \strlen($name[0])
             : $unnamedAt;
 
-        throw $this->state->error(
-            \sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $position),
-            ErrorCode::ConditionalAssertionExpected(),
-            $position,
-        );
+        throw $this->state->error(\sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $position), ErrorCode::ConditionalAssertionExpected(), $position);
     }
 
     /**
@@ -432,11 +403,7 @@ final class ConditionParser
             return;
         }
 
-        throw $this->state->error(
-            \sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $faultAt),
-            ErrorCode::ConditionalAssertionExpected(),
-            $faultAt,
-        );
+        throw $this->state->error(\sprintf('Invalid conditional condition at position %d: a lookaround assertion is expected after "(?(".', $faultAt), ErrorCode::ConditionalAssertionExpected(), $faultAt);
     }
 
     /**
@@ -504,7 +471,7 @@ final class ConditionParser
         }
 
         // Past the whole character in UTF mode.
-        $width = $this->state->unicodeMode && 1 === LibraryPcre::match('/\G./su', $this->pattern, $character, 0, $nameEnd) ? \strlen($character[0]) : 1;
+        $width = $this->state->unicodeMode ? Utf8::width($this->pattern, $nameEnd) : 1;
         $position = $nameEnd >= \strlen($this->pattern) ? $nameEnd : $this->target->faultOffset($nameEnd + $width, $width);
 
         return $this->state->error(\sprintf('Unknown alphabetic assertion "(*%s" at position %d: a ":" is expected after the name.', $name[0], $position), ErrorCode::VerbInvalid(), $position);
@@ -514,7 +481,7 @@ final class ConditionParser
      * Parses what follows the condition of a conditional: the branches, and
      * the closing parenthesis.
      *
-     * @return \PHPRegex\Parser\Node\ConditionalNode|\PHPRegex\Parser\Node\DefineNode
+     * @return ConditionalNode|DefineNode
      */
     private function readBranches(int $startPosition, NodeInterface $condition)
     {
@@ -578,11 +545,7 @@ final class ConditionParser
         // Past the "?" from PCRE2 10.47, on it before.
         $position = $faultPosition ?? $this->target->faultOffset($startPosition + 1);
 
-        throw $this->state->error(
-            \sprintf('Invalid conditional condition at position %d.', $position),
-            ErrorCode::ConditionalAssertionExpected(),
-            $position,
-        );
+        throw $this->state->error(\sprintf('Invalid conditional condition at position %d.', $position), ErrorCode::ConditionalAssertionExpected(), $position);
     }
 
     /**
@@ -720,7 +683,7 @@ final class ConditionParser
      * "(?(R2)" and "(?(R&name)" test a recursion, unless a group has the
      * name "R" or "R2", which PCRE2 looks up first: then it tests that group.
      *
-     * @return \PHPRegex\Parser\Node\SubroutineNode|\PHPRegex\Parser\Node\BackrefNode|null
+     * @return SubroutineNode|BackrefNode|null
      */
     private function recursionCondition(int $startPosition)
     {
@@ -852,11 +815,7 @@ final class ConditionParser
         if ($this->state->unicodeMode && $this->groupNames->startsWithDigit($startPosition)) {
             $position = $this->groupNames->invalidNameOffset($startPosition);
 
-            throw $this->state->error(
-                \sprintf('Invalid condition name at position %d: a group name must not start with a digit.', $position),
-                ErrorCode::GroupNameInvalid(),
-                $position,
-            );
+            throw $this->state->error(\sprintf('Invalid condition name at position %d: a group name must not start with a digit.', $position), ErrorCode::GroupNameInvalid(), $position);
         }
 
         $bareName = $this->bareNameCondition($startPosition);
@@ -875,14 +834,7 @@ final class ConditionParser
         // "((?=a))", is no condition.
         $position = $this->groupNames->invalidNameOffset($startPosition);
 
-        throw $this->state->error(
-            \sprintf(
-                'Invalid conditional construct at position %d. Condition must be a group reference, lookaround, or (DEFINE).',
-                $position,
-            ),
-            ErrorCode::ConditionalInvalid(),
-            $position,
-        );
+        throw $this->state->error(\sprintf('Invalid conditional construct at position %d. Condition must be a group reference, lookaround, or (DEFINE).', $position), ErrorCode::ConditionalInvalid(), $position);
     }
 
     /**

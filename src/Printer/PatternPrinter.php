@@ -84,6 +84,18 @@ use PHPRegex\Parser\Text\Bytes;
 final class PatternPrinter extends AbstractNodeVisitor
 {
     /**
+     * Inside a character class, where other characters are special.
+     */
+    private bool $inCharClass = false;
+    /**
+     * Inside "(?[...])", where a plain character is no operand.
+     */
+    private bool $inExtendedClass = false;
+    /**
+     * In a class inside "(?[...])", read under "xx", where a space is skipped.
+     */
+    private bool $inClassOfExtendedClass = false;
+    /**
      * The flags a non-atomic lookaround carries: "(?*...)" and "(?<*...)".
      */
     private const NON_ATOMIC_FLAG = '*';
@@ -169,88 +181,34 @@ final class PatternPrinter extends AbstractNodeVisitor
         '\\' => true, ']' => true, '-' => true, '^' => true, '[' => true,
     ];
 
-    /**
-     *
-     * @var bool
-     */
-    private $pretty = false;
+    private string $delimiter = '/';
 
-    /**
-     *
-     * @var bool
-     */
-    private $collapseExtendedComments = false;
+    private string $closingDelimiter = '/';
 
-    /**
-     *
-     * @var bool
-     */
-    private $preserveSpelling = true;
-
-    /**
-     * Inside a character class, where other characters are special.
-     *
-     * @var bool
-     */
-    private $inCharClass = false;
-
-    /**
-     * Inside "(?[...])", where a plain character is no operand.
-     *
-     * @var bool
-     */
-    private $inExtendedClass = false;
-
-    /**
-     * In a class inside "(?[...])", read under "xx", where a space is skipped.
-     *
-     * @var bool
-     */
-    private $inClassOfExtendedClass = false;
-
-    /**
-     * @var string
-     */
-    private $delimiter = '/';
-
-    /**
-     * @var string
-     */
-    private $closingDelimiter = '/';
-
-    /**
-     * @var string
-     */
-    private $flags = '';
+    private string $flags = '';
 
     /**
      * Whether a leading (*UTF) makes the pattern UTF-8, as the u flag does.
-     *
-     * @var bool
      */
-    private $utfVerb = false;
+    private bool $utfVerb = false;
 
     /**
      * Pattern body the AST was parsed from, when it is known.
-     *
-     * @var string|null
      */
-    private $source;
+    private ?string $source = null;
 
     /**
      * Cached \Q...\E regions of $source.
      *
      * @var list<array{int, int}>|null
      */
-    private $quotedSpans;
+    private ?array $quotedSpans = null;
 
     /**
      * The tree of $source, which tells a "\Q" in a comment or a name from
      * one that opens a quote.
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface|null
      */
-    private $sourcePattern;
+    private ?NodeInterface $sourcePattern = null;
 
     /**
      * The layout of the pattern being formatted or pretty printed. While it
@@ -258,55 +216,41 @@ final class PatternPrinter extends AbstractNodeVisitor
      * or pretty printing lays a pattern out under x, where newlines and
      * indents are ignored. Without x the layout would change what the
      * pattern matches.
-     *
-     * @var \PHPRegex\Parser\Printer\PatternLayout|null
      */
-    private $layout;
+    private ?PatternLayout $layout = null;
 
     /**
      * Capturing groups written so far: whether "\NN" is read as a reference
      * where it is written depends on them.
-     *
-     * @var int
      */
-    private $capturesOpened = 0;
+    private int $capturesOpened = 0;
 
     /**
      * One of the MODE_* constants.
-     *
-     * @var string
      */
-    private $mode;
+    private string $mode;
 
     /**
      * The width a laid-out line aims at, indent included.
-     *
-     * @var int
      */
-    private $width = self::PRETTY_WIDTH;
+    private int $width = self::PRETTY_WIDTH;
 
     /**
      * Whether widths count code points (u, or a leading (*UTF)) or bytes.
-     *
-     * @var bool
      */
-    private $countsCodePoints = false;
+    private bool $countsCodePoints = false;
 
     /**
      * Why the last pattern formatted was left as written, if it was.
-     *
-     * @var \PHPRegex\Parser\Printer\FormatRefusal|null
      */
-    private $refusal;
+    private ?FormatRefusal $refusal = null;
 
     /**
      * Whether the formatter adds x to a pattern written without it: a raw
      * no-break space is then escaped, as PHP's locale tables may call it
      * white space.
-     *
-     * @var bool
      */
-    private $addsExtended = false;
+    private bool $addsExtended = false;
 
     /**
      * The comments a compacted pattern keeps, by object id, each with the
@@ -315,7 +259,7 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var array<int, string>
      */
-    private $keptComments = [];
+    private array $keptComments = [];
 
     /**
      * The source offsets of the brackets of "\Q...\E" runs that a rewritten
@@ -323,7 +267,7 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var array<int, true>
      */
-    private $keptQuotedBrackets = [];
+    private array $keptQuotedBrackets = [];
 
     /**
      * Where pretty printing writes a bracket delimiter, or a pattern is
@@ -333,7 +277,7 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var non-empty-string|null
      */
-    private $bracketMark;
+    private ?string $bracketMark = null;
 
     /**
      * While the pattern is written again, marked, because PHP would not end
@@ -344,15 +288,13 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var non-empty-string|null
      */
-    private $rebalancingMark;
+    private ?string $rebalancingMark = null;
 
     /**
      * Whether the last body rendered could not be spelled so that PHP ends
      * the pattern where PCRE does (see endingWhereWritten).
-     *
-     * @var bool
      */
-    private $delimiterMisread = false;
+    private bool $delimiterMisread = false;
 
     /**
      * The groups holding only comments that a compacted pattern drops, by
@@ -360,7 +302,7 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var array<int, true>
      */
-    private $droppedGroups = [];
+    private array $droppedGroups = [];
 
     /**
      * The source span of the last braces joined that hold a space or a tab
@@ -369,7 +311,16 @@ final class PatternPrinter extends AbstractNodeVisitor
      *
      * @var array{int, int}|null
      */
-    private $spacedBraces;
+    private ?array $spacedBraces = null;
+    /**
+     */
+    private bool $pretty = false;
+    /**
+     */
+    private bool $collapseExtendedComments = false;
+    /**
+     */
+    private bool $preserveSpelling = true;
 
     /**
      * asWritten(), normalized() and pretty() name the printer each flag set
@@ -381,20 +332,20 @@ final class PatternPrinter extends AbstractNodeVisitor
         bool $collapseExtendedComments = false,
         bool $preserveSpelling = true
     ) {
-        /*
+        /**
          * When true, escapes are normalized and, under x only, the pattern
          * is laid out over lines as the formatter lays it out, at a width
          * of 80; without x it is written on one line, as newlines and
          * indents would change what it matches.
          */
         $this->pretty = $pretty;
-        /*
+        /**
          * When true, comments in extended (/x) mode are collapsed to a generic
          * "(?#...)" placeholder. This is useful for generating a normalized
          * representation of verbose regexes without leaking full comment text.
          */
         $this->collapseExtendedComments = $collapseExtendedComments;
-        /*
+        /**
          * When false, escapes and comment syntax are normalized instead of
          * being given back the way the pattern spelled them. Comparing two
          * patterns needs that normalized form.
@@ -555,7 +506,7 @@ final class PatternPrinter extends AbstractNodeVisitor
     public function countCapture(GroupNode $node): void
     {
         if (GroupType::Capturing() === $node->type || GroupType::Named() === $node->type) {
-            $this->capturesOpened++;
+            ++$this->capturesOpened;
         }
     }
 
@@ -632,7 +583,7 @@ final class PatternPrinter extends AbstractNodeVisitor
         $result = $this->ignorableText($node->getStartPosition(), $alternatives[0]->getStartPosition());
         $result .= $alternatives[0]->accept($this);
 
-        for ($i = 1, $count = \count($alternatives); $i < $count; $i++) {
+        for ($i = 1, $count = \count($alternatives); $i < $count; ++$i) {
             [$before, $after] = $this->ignorableTextAroundSeparator($alternatives[$i - 1], $alternatives[$i]);
             $result .= $before.$separator.$after.$alternatives[$i]->accept($this);
         }
@@ -661,7 +612,7 @@ final class PatternPrinter extends AbstractNodeVisitor
         $result = $this->ignorableText($node->getStartPosition(), $children[0]->getStartPosition());
 
         $previous = null;
-        for ($i = 0, $count = \count($children); $i < $count; $i++) {
+        for ($i = 0, $count = \count($children); $i < $count; ++$i) {
             $child = $children[$i];
 
             // Under a "#" delimiter PHP reads a comment only right after a
@@ -909,16 +860,16 @@ final class PatternPrinter extends AbstractNodeVisitor
         if (1 === \strlen($rep)) {
             $ord = \ord($rep);
             if ($ord < 32 || 127 === $ord || (!$unicodeMode && $ord >= 128)) {
-                switch ($ord) {
-                    case 9:
+                switch (true) {
+                    case 9 === $ord:
                         return '\\t';
-                    case 10:
+                    case 10 === $ord:
                         return '\\n';
-                    case 13:
+                    case 13 === $ord:
                         return '\\r';
-                    case 12:
+                    case 12 === $ord:
                         return '\\f';
-                    case 27:
+                    case 27 === $ord:
                         return '\\e';
                     default:
                         return '\\x'.Ascii::upper(str_pad(dechex($ord), 2, '0', \STR_PAD_LEFT));
@@ -948,7 +899,7 @@ final class PatternPrinter extends AbstractNodeVisitor
     {
         // "(*sr:...)" is the same verb written short, "(*asr:...)" its
         // atomic form.
-        $spellings = $node->atomic ? ['asr', 'atomic_script_run'] : ['sr', 'script_run'];
+        $spellings = $node->isAtomic ? ['asr', 'atomic_script_run'] : ['sr', 'script_run'];
         $written = $this->writtenText($node);
         if (null !== $written && \in_array($written, ['(*'.$spellings[0].':'.$node->script.')', '(*'.$spellings[1].':'.$node->script.')'], true)) {
             return $written;
@@ -970,7 +921,7 @@ final class PatternPrinter extends AbstractNodeVisitor
     {
         $prop = $node->hasBraces ? trim($node->prop, '{}') : $node->prop;
 
-        if ($node->negatedSyntax) {
+        if ($node->isNegatedSyntax) {
             // Undo the "^" normalization so \P{L} round-trips byte-identically.
             $inner = 0 === strncmp($prop, '^', strlen('^')) ? (string) substr($prop, 1) : '^'.$prop;
 
@@ -986,7 +937,6 @@ final class PatternPrinter extends AbstractNodeVisitor
         }
 
         return '\p'.$prop;
-
     }
 
     #[\Override]
@@ -1027,7 +977,7 @@ final class PatternPrinter extends AbstractNodeVisitor
 
         // A "#" comment ends its line: a laid-out line writes it without the
         // line break, which the layout puts back.
-        if ($this->laysOut() && $node->extended) {
+        if ($this->laysOut() && $node->isExtended) {
             ($nullsafeVariable1 = $this->layout) ? $nullsafeVariable1->noteLineComment() : null;
 
             return null !== $this->layout && $this->layout->isActive() ? rtrim($node->comment, "\n") : $node->comment;
@@ -1035,7 +985,7 @@ final class PatternPrinter extends AbstractNodeVisitor
 
         // A comment written as "# ..." is extended-mode whatever the pattern
         // flags say: /x can also be turned on inline with "(?x)".
-        $isExtended = $node->extended || false !== strpos($this->flags, 'x');
+        $isExtended = $node->isExtended || false !== strpos($this->flags, 'x');
 
         // In normalized mode, collapse all extended (/x) comments to a
         // lightweight inline placeholder so that we preserve structure
@@ -1049,7 +999,7 @@ final class PatternPrinter extends AbstractNodeVisitor
         // with their trailing newline.
         // An inline "(?##c)" keeps its parentheses: printed as "#c" it would
         // run to the end of the line and swallow what follows.
-        if ($isExtended && $node->extended) {
+        if ($isExtended && $node->isExtended) {
             return $node->comment;
         }
 
@@ -1117,12 +1067,12 @@ final class PatternPrinter extends AbstractNodeVisitor
             }
         }
 
-        switch ($node->syntax) {
-            case '&':
+        switch (true) {
+            case '&' === $node->syntax:
                 return '(?&'.$node->reference.$returned.')';
-            case 'P>':
+            case 'P>' === $node->syntax:
                 return '(?P>'.$node->reference.$returned.')';
-            case 'g':
+            case 'g' === $node->syntax:
                 return '\g<'.$node->reference.'>';
             default:
                 return '(?'.$node->reference.$returned.')';
@@ -1268,21 +1218,21 @@ final class PatternPrinter extends AbstractNodeVisitor
 
             $offset += \strlen($part);
             if ($offset < $length) {
-                $pieces[] = [(static function () use ($value, $offset) {
-                    switch ($value[$offset]) {
-                        case "\n":
+                $pieces[] = [(function () use ($value, $offset) {
+                    switch (true) {
+                        case "\n" === $value[$offset]:
                             return '\\n';
-                        case "\r":
+                        case "\r" === $value[$offset]:
                             return '\\r';
-                        case "\t":
+                        case "\t" === $value[$offset]:
                             return '\\t';
-                        case "\v":
+                        case "\v" === $value[$offset]:
                             return '\\x0B';
                         default:
                             return '\\f';
                     }
                 })(), PatternLayout::PIECE_SPACE];
-                $offset++;
+                ++$offset;
             }
         }
 
@@ -1390,7 +1340,7 @@ final class PatternPrinter extends AbstractNodeVisitor
 
         // Most literals need no escape: a first pass finds out.
         $len = \strlen($value);
-        for ($i = 0; $i < $len; $i++) {
+        for ($i = 0; $i < $len; ++$i) {
             $char = $value[$i];
             $ord = \ord($char);
             if (
@@ -1414,7 +1364,7 @@ final class PatternPrinter extends AbstractNodeVisitor
         }
 
         $result = '';
-        for ($i = 0; $i < $len; $i++) {
+        for ($i = 0; $i < $len; ++$i) {
             $char = $value[$i];
             if (
                 $char === $this->delimiter
@@ -1425,34 +1375,28 @@ final class PatternPrinter extends AbstractNodeVisitor
             ) {
                 $result .= ($this->bracketMarkFor($char) ?? '\\').$char;
             } elseif (\ord($char) < 32 || 127 === \ord($char) || (!$unicodeMode && \ord($char) >= 128)) {
-                switch (\ord($char)) {
-                    case 8:
+                $matchSubject1385 = \ord($char);
+                switch (true) {
+                    case 8 === $matchSubject1385:
                         $escape = $this->inCharClass ? '\\b' : '\\x08';
-
                         break;
-                    case 9:
+                    case 9 === $matchSubject1385:
                         $escape = '\\t';
-
                         break;
-                    case 10:
+                    case 10 === $matchSubject1385:
                         $escape = '\\n';
-
                         break;
-                    case 13:
+                    case 13 === $matchSubject1385:
                         $escape = '\\r';
-
                         break;
-                    case 12:
+                    case 12 === $matchSubject1385:
                         $escape = '\\f';
-
                         break;
-                    case 27:
+                    case 27 === $matchSubject1385:
                         $escape = '\\e';
-
                         break;
                     default:
                         $escape = '\\x'.Ascii::upper(str_pad(dechex(\ord($char)), 2, '0', \STR_PAD_LEFT));
-
                         break;
                 }
                 $result .= $escape;
@@ -1481,18 +1425,15 @@ final class PatternPrinter extends AbstractNodeVisitor
             $nodeCompiled = '(?:'.$nodeCompiled.')';
         }
 
-        switch ($node->type) {
-            case QuantifierType::Lazy():
+        switch (true) {
+            case $node->type === QuantifierType::Lazy():
                 $suffix = '?';
-
                 break;
-            case QuantifierType::Possessive():
+            case $node->type === QuantifierType::Possessive():
                 $suffix = '+';
-
                 break;
             default:
                 $suffix = '';
-
                 break;
         }
 
@@ -1532,7 +1473,7 @@ final class PatternPrinter extends AbstractNodeVisitor
      * "-" and "^" alike, and the operators of one precedence bind left to
      * right.
      */
-    private function classSetOperand(NodeInterface $operand, $outer, bool $isRight): string
+    private function classSetOperand(NodeInterface $operand, ClassSetOperator $outer, bool $isRight): string
     {
         $text = $operand->accept($this);
         if (!$operand instanceof ClassSetOperationNode || ClassSetOperator::Complement() === $operand->operator) {
@@ -1542,15 +1483,12 @@ final class PatternPrinter extends AbstractNodeVisitor
         switch (true) {
             case ClassSetOperator::Complement() === $outer:
                 $parenthesised = true;
-
                 break;
             case ClassSetOperator::Intersection() === $operand->operator:
                 $parenthesised = ClassSetOperator::Intersection() === $outer && $isRight;
-
                 break;
             default:
                 $parenthesised = ClassSetOperator::Intersection() === $outer || $isRight;
-
                 break;
         }
 
@@ -1590,31 +1528,33 @@ final class PatternPrinter extends AbstractNodeVisitor
     {
         $name = $node->name ?? '';
 
-        switch ($node->type) {
-            case GroupType::Capturing():
+        switch (true) {
+            case $node->type === GroupType::Capturing():
                 return '(';
-            case GroupType::NonCapturing():
+            case $node->type === GroupType::NonCapturing():
                 return '(?:';
-            case GroupType::Named():
+            case $node->type === GroupType::Named():
                 return $node->usePythonSyntax
                     ? '(?P<'.$name.'>'
                     : '(?<'.$name.'>';
-            case GroupType::LookaheadPositive():
+            case $node->type === GroupType::LookaheadPositive():
                 return self::NON_ATOMIC_FLAG === $flags ? '(?*' : '(?=';
-            case GroupType::LookaheadNegative():
+            case $node->type === GroupType::LookaheadNegative():
                 return '(?!';
-            case GroupType::LookbehindPositive():
+            case $node->type === GroupType::LookbehindPositive():
                 return self::NON_ATOMIC_FLAG === $flags ? '(?<*' : '(?<=';
-            case GroupType::LookbehindNegative():
+            case $node->type === GroupType::LookbehindNegative():
                 return '(?<!';
-            case GroupType::Atomic():
+            case $node->type === GroupType::Atomic():
                 return '(?>';
-            case GroupType::BranchReset():
+            case $node->type === GroupType::BranchReset():
                 return '(?|';
-            case GroupType::InlineFlags():
+            case $node->type === GroupType::InlineFlags():
                 return '(?'.$flags.':';
-            case GroupType::ScanSubstring():
+            case $node->type === GroupType::ScanSubstring():
                 return $this->scanSubstringOpening($node);
+            default:
+                throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($node->type));
         }
     }
 
@@ -1907,7 +1847,11 @@ final class PatternPrinter extends AbstractNodeVisitor
         }
 
         if (1 === LibraryPcre::match('/^\\\\(?:o\\{([0-7]+)\\}|([0-7]{1,3}))$/', $text, $matches)) {
-            return (int) octdec($matches[1] ?: ($matches[2] ?? ''));
+            // Past seven digits an octal value is past U+10FFFF, and past
+            // what an integer holds.
+            $digits = ltrim($matches[1] ?: ($matches[2] ?? ''), '0');
+
+            return \strlen($digits) > 7 ? null : (int) octdec('' === $digits ? '0' : $digits);
         }
 
         if (1 === LibraryPcre::match('/^.$/us', $text)) {
@@ -1982,7 +1926,7 @@ final class PatternPrinter extends AbstractNodeVisitor
     {
         $run = 0;
         while ($offset > $run && '\\' === $text[$offset - $run - 1]) {
-            $run++;
+            ++$run;
         }
 
         return 0 === $run % 2 || ($offset - $run >= 2 && 'c' === $text[$offset - $run - 1] && '\\' === $text[$offset - $run - 2]);
@@ -2171,7 +2115,7 @@ final class PatternPrinter extends AbstractNodeVisitor
     private function compileCharClassMembers(array $members): string
     {
         $result = $this->compileCharClassNode($members[0], $members[1] ?? null);
-        for ($i = 1, $count = \count($members); $i < $count; $i++) {
+        for ($i = 1, $count = \count($members); $i < $count; ++$i) {
             $next = $this->compileCharClassNode($members[$i], $members[$i + 1] ?? null);
             // Under "(?xx)" a skipped space may be what kept a hyphen from
             // the class escape before it, "[\d -z]": written without it,
@@ -2270,21 +2214,17 @@ final class PatternPrinter extends AbstractNodeVisitor
         $written = null === $this->source ? null : $node->delimiter.$this->source.$this->closingDelimiter.$node->flags;
 
         switch (true) {
-            case self::MODE_PRETTY === $this->mode:
+            case true === (self::MODE_PRETTY === $this->mode):
                 $refusal = null;
-
                 break;
-            case self::holdsLineBreakInName($node->pattern):
+            case true === self::holdsLineBreakInName($node->pattern):
                 $refusal = FormatRefusal::LineBreakInName();
-
                 break;
-            case self::MODE_COMPACT === $this->mode && $this->extendedModeMovesSpacedBraces($node->pattern, $node->flags, str_replace('x', '', $node->flags)):
+            case true === (self::MODE_COMPACT === $this->mode && $this->extendedModeMovesSpacedBraces($node->pattern, $node->flags, str_replace('x', '', $node->flags))):
                 $refusal = FormatRefusal::SpacedQuantifier();
-
                 break;
             default:
                 $refusal = null;
-
                 break;
         }
         if (null !== $refusal) {
@@ -2386,13 +2326,13 @@ final class PatternPrinter extends AbstractNodeVisitor
         }
 
         switch (true) {
-            case $this->extendedModeMovesSpacedBraces($node->pattern, $node->flags, $flags):
+            case true === $this->extendedModeMovesSpacedBraces($node->pattern, $node->flags, $flags):
                 return FormatRefusal::SpacedQuantifier();
-            case $hasLineComment && \in_array($newline, ['CR', 'CRLF', 'NUL'], true):
+            case true === ($hasLineComment && \in_array($newline, ['CR', 'CRLF', 'NUL'], true)):
                 return FormatRefusal::NewlineConvention();
-            case self::switchesExtendedOffAtTop($node->pattern, $flags):
+            case true === self::switchesExtendedOffAtTop($node->pattern, $flags):
                 return FormatRefusal::ExtendedModeSwitchedOff();
-            case '#' === $node->delimiter && self::holdsComment($node->pattern):
+            case true === ('#' === $node->delimiter && self::holdsComment($node->pattern)):
                 return FormatRefusal::DelimiterMisread();
             default:
                 return null;
@@ -2680,9 +2620,9 @@ final class PatternPrinter extends AbstractNodeVisitor
         $closesParenthesis = false;
         if (null !== $this->rebalancingMark) {
             $text = $node->comment;
-            for ($i = 0, $length = \strlen($text); $i < $length; $i++) {
+            for ($i = 0, $length = \strlen($text); $i < $length; ++$i) {
                 if ('\\' === $text[$i]) {
-                    $i++;
+                    ++$i;
                 } elseif ($text[$i] === $this->delimiter || $text[$i] === $this->closingDelimiter) {
                     $brackets .= $this->rebalancingMark.DelimiterBrackets::MARK_COMMENT.$text[$i];
                     $closesParenthesis = $closesParenthesis || ')' === $text[$i];

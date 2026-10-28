@@ -37,7 +37,6 @@ use PHPRegex\Parser\Node\LimitMatchNode;
 use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
@@ -67,13 +66,10 @@ final class ComplexityScorer extends AbstractNodeVisitor
     /**
      * @var array<string, bool>
      */
-    private static $unboundedQuantifierCache = [];
+    private static array $unboundedQuantifierCache = [];
 
     // Minimal state tracking
-    /**
-     * @var int
-     */
-    private $quantifierDepth = 0;
+    private int $quantifierDepth = 0;
 
     #[\Override]
     public function visitRegex(RegexNode $node): int
@@ -114,12 +110,12 @@ final class ComplexityScorer extends AbstractNodeVisitor
     {
         $childScore = $node->child->accept($this);
 
-        switch ($node->type) {
-            case GroupType::LookaheadPositive():
-            case GroupType::LookaheadNegative():
-            case GroupType::LookbehindPositive():
-            case GroupType::LookbehindNegative():
-            case GroupType::ScanSubstring():
+        switch (true) {
+            case $node->type === GroupType::LookaheadPositive():
+            case $node->type === GroupType::LookaheadNegative():
+            case $node->type === GroupType::LookbehindPositive():
+            case $node->type === GroupType::LookbehindNegative():
+            case $node->type === GroupType::ScanSubstring():
                 return self::COMPLEX_CONSTRUCT_SCORE + $childScore;
             default:
                 return self::BASE_SCORE + $childScore;
@@ -129,8 +125,7 @@ final class ComplexityScorer extends AbstractNodeVisitor
     #[\Override]
     public function visitQuantifier(QuantifierNode $node): int
     {
-        $quant = $node->quantifier;
-        $isUnbounded = $this->isUnboundedQuantifier($quant);
+        $isUnbounded = $this->isUnboundedQuantifier($node);
         $score = 0;
 
         if ($isUnbounded) {
@@ -139,17 +134,20 @@ final class ComplexityScorer extends AbstractNodeVisitor
                 // Exponentially penalize nested unbounded quantifiers (ReDoS detection)
                 $score *= (self::NESTING_MULTIPLIER * $this->quantifierDepth);
             }
-            $this->quantifierDepth++;
+            ++$this->quantifierDepth;
         } else {
             // Bounded quantifiers are simpler
             $score += self::BASE_SCORE;
         }
 
-        // Add the score of the quantified node
-        $score += $node->node->accept($this);
-
-        if ($isUnbounded) {
-            $this->quantifierDepth--;
+        // Add the score of the quantified node; the depth comes back whatever
+        // happens below, so a scorer reused after a failure starts afresh.
+        try {
+            $score += $node->node->accept($this);
+        } finally {
+            if ($isUnbounded) {
+                --$this->quantifierDepth;
+            }
         }
 
         return $score;
@@ -323,8 +321,9 @@ final class ComplexityScorer extends AbstractNodeVisitor
     /**
      * Cached unbounded quantifier detection.
      */
-    private function isUnboundedQuantifier(string $quant): bool
+    private function isUnboundedQuantifier(QuantifierNode $node): bool
     {
+        $quant = $node->quantifier;
         // Return cached result if available
         if (isset(self::$unboundedQuantifierCache[$quant])) {
             return self::$unboundedQuantifierCache[$quant];
@@ -333,7 +332,7 @@ final class ComplexityScorer extends AbstractNodeVisitor
         self::$unboundedQuantifierCache = StaticCaches::makeRoom(self::$unboundedQuantifierCache);
         StaticCaches::register(self::class, \Closure::fromCallable([self::class, 'clearCaches']));
 
-        return self::$unboundedQuantifierCache[$quant] = (($nullsafeVariable3 = QuantifierBounds::parse($quant)) ? $nullsafeVariable3->isUnbounded() : null) ?? false;
+        return self::$unboundedQuantifierCache[$quant] = (($nullsafeVariable3 = $node->bounds) ? $nullsafeVariable3->isUnbounded() : null) ?? false;
     }
 
     private static function clearCaches(): void

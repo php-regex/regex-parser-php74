@@ -20,10 +20,7 @@ namespace PHPRegex\Parser\Exception;
  */
 trait VisualContextTrait
 {
-    /**
-     * @var string|null
-     */
-    private $pattern;
+    private ?string $pattern = null;
 
     /**
      * The pattern the snippet is drawn from, as written.

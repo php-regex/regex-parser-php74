@@ -42,6 +42,10 @@ use PHPRegex\Parser\Node\NodeInterface;
 final class ExtendedClassLength
 {
     /**
+     * The bytes of the lists the operands keep beside the code.
+     */
+    public int $charListBytes = 0;
+    /**
      * A map of no byte, of every byte, and of the bytes past ASCII.
      */
     public const NO_BYTE = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
@@ -51,55 +55,35 @@ final class ExtendedClassLength
     public const PAST_ASCII = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF";
 
     /**
-     * The bytes of the lists the operands keep beside the code.
-     *
-     * @var int
-     */
-    public $charListBytes = 0;
-
-    /**
      * Up to 10.47, the most the class has counted when the lists of one of
      * its operands are checked against the limit, those lists included; 0
      * where it keeps none.
-     *
-     * @var int
      */
-    public $listsPeak = 0;
+    public int $listsPeak = 0;
 
     /**
      * Whether the class is written as a match of any character, which a
      * count repeats as it does a type; null where that is not known.
-     *
-     * @var bool|null
      */
-    public $matchesAnyCharacter = false;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\Validation\ClassLength
-     */
-    private $classes;
+    public ?bool $matchesAnyCharacter = false;
 
     /**
      * The units counted so far for the operands and operations.
-     *
-     * @var int
      */
-    private $counted = 0;
+    private int $counted = 0;
 
     /**
      * Whether the class needs a map.
-     *
-     * @var bool
      */
-    private $needsMap = false;
+    private bool $needsMap = false;
 
     /**
      * Whether the class is read under rules kept to ASCII.
-     *
-     * @var bool
      */
-    private $restricted = false;
+    private bool $restricted = false;
+    /**
+     */
+    private ClassLength $classes;
 
     public function __construct(ClassLength $classes)
     {
@@ -144,7 +128,7 @@ final class ExtendedClassLength
 
         // The header, then each operand and operation. Where it is not
         // known whether the class holds every byte, an operand is a map of
-        // what a property or the locale holds, which counted 33 units: the
+        // what the locale holds without UTF, which counted 33 units: the
         // class counts as many whatever it is written as, but a count
         // repeats it as a type or as a class.
         $counted = 4 + $this->counted;
@@ -184,22 +168,18 @@ final class ExtendedClassLength
             return $this->operation($node->right, !$negated, $caseless);
         }
 
-        switch ($node->operator) {
-            case ClassSetOperator::Union():
+        switch (true) {
+            case $node->operator === ClassSetOperator::Union():
                 [$operator, $rightNegated] = [$negated ? ClassSetOperator::Intersection() : ClassSetOperator::Union(), $negated];
-
                 break;
-            case ClassSetOperator::Intersection():
+            case $node->operator === ClassSetOperator::Intersection():
                 [$operator, $rightNegated] = [$negated ? ClassSetOperator::Union() : ClassSetOperator::Intersection(), $negated];
-
                 break;
-            case ClassSetOperator::Difference():
+            case $node->operator === ClassSetOperator::Difference():
                 [$operator, $rightNegated] = [$negated ? ClassSetOperator::Union() : ClassSetOperator::Intersection(), !$negated];
-
                 break;
             default:
                 [$operator, $rightNegated] = [ClassSetOperator::SymmetricDifference(), $negated];
-
                 break;
         }
 
@@ -250,11 +230,11 @@ final class ExtendedClassLength
 
         // Every character or none past 255 is one unit where it is written,
         // which nothing reads: it is never written in an operation.
-        return [(static function () use ($kind) {
-            switch ($kind) {
-                case 'class':
+        return [(function () use ($kind) {
+            switch (true) {
+                case 'class' === $kind:
                     return 'none';
-                case 'nclass':
+                case 'nclass' === $kind:
                     return 'any';
                 default:
                     return $kind;
@@ -274,7 +254,7 @@ final class ExtendedClassLength
      *
      * @phpstan-impure it counts the units of each operand and operation
      */
-    private function combine($operator, array $left, array $right): array
+    private function combine(ClassSetOperator $operator, array $left, array $right): array
     {
         [$leftKind, $leftUnits, $leftOnes, $leftUnknown] = $left;
         [$rightKind, $rightUnits, $rightOnes, $rightUnknown] = $right;
@@ -286,16 +266,13 @@ final class ExtendedClassLength
                 case 'any' === $rightKind:
                 case 'none' === $leftKind:
                     $kept = $left;
-
                     break;
                 case 'any' === $leftKind:
                 case 'none' === $rightKind:
                     $kept = $right;
-
                     break;
                 default:
                     $kept = null;
-
                     break;
             }
         } elseif (ClassSetOperator::Union() === $operator) {
@@ -305,16 +282,13 @@ final class ExtendedClassLength
                 case 'none' === $rightKind:
                 case 'any' === $leftKind:
                     $kept = $left;
-
                     break;
                 case 'none' === $leftKind:
                 case 'any' === $rightKind:
                     $kept = $right;
-
                     break;
                 default:
                     $kept = null;
-
                     break;
             }
         } else {
@@ -324,29 +298,24 @@ final class ExtendedClassLength
             switch (true) {
                 case 'none' === $rightKind:
                     $kept = $left;
-
                     break;
                 case 'none' === $leftKind:
                     $kept = $right;
-
                     break;
                 case 'any' === $rightKind:
                     $kept = $this->turnedOver($left);
-
                     break;
                 case 'any' === $leftKind:
                     $kept = $this->turnedOver($right);
-
                     break;
                 default:
                     $kept = null;
-
                     break;
             }
         }
 
         if (null === $kept) {
-            $this->counted++;
+            ++$this->counted;
 
             return ['ops', $leftUnits + $rightUnits + 1, $ones, $unknown];
         }
@@ -369,22 +338,19 @@ final class ExtendedClassLength
     {
         [$kind, $units, $ones, $unknown] = $operand;
         if ('ops' === $kind) {
-            $this->counted++;
-            $units++;
+            ++$this->counted;
+            ++$units;
         }
 
-        switch ($kind) {
-            case 'any':
+        switch (true) {
+            case 'any' === $kind:
                 $kind = 'none';
-
                 break;
-            case 'none':
+            case 'none' === $kind:
                 $kind = 'any';
-
                 break;
             default:
                 $kind = $kind;
-
                 break;
         }
 

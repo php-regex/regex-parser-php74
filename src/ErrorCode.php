@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser;
 
 /**
- * Cached-instance twin of the ErrorCode enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The ErrorCode enum as a class of shared instances: ErrorCode::AssertionInvalid() returns
+ * the same instance at each call.
  */
-final class ErrorCode
+final class ErrorCode implements BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,1001 +25,557 @@ final class ErrorCode
 
     public static function AssertionInvalid(): self
     {
-        if (!isset(self::$instances['AssertionInvalid'])) {
-            self::$instances['AssertionInvalid'] = new self('AssertionInvalid', 'regex.assertion.invalid');
-        }
-
-        return self::$instances['AssertionInvalid'];
+        return self::$instances['AssertionInvalid'] ??= new self('AssertionInvalid', 'regex.assertion.invalid');
     }
 
     public static function BackrefInvalidSyntax(): self
     {
-        if (!isset(self::$instances['BackrefInvalidSyntax'])) {
-            self::$instances['BackrefInvalidSyntax'] = new self('BackrefInvalidSyntax', 'regex.backref.invalid_syntax');
-        }
-
-        return self::$instances['BackrefInvalidSyntax'];
+        return self::$instances['BackrefInvalidSyntax'] ??= new self('BackrefInvalidSyntax', 'regex.backref.invalid_syntax');
     }
 
     public static function BackrefMissingGroup(): self
     {
-        if (!isset(self::$instances['BackrefMissingGroup'])) {
-            self::$instances['BackrefMissingGroup'] = new self('BackrefMissingGroup', 'regex.backref.missing_group');
-        }
-
-        return self::$instances['BackrefMissingGroup'];
+        return self::$instances['BackrefMissingGroup'] ??= new self('BackrefMissingGroup', 'regex.backref.missing_group');
     }
 
     public static function BackrefMissingNamedGroup(): self
     {
-        if (!isset(self::$instances['BackrefMissingNamedGroup'])) {
-            self::$instances['BackrefMissingNamedGroup'] = new self('BackrefMissingNamedGroup', 'regex.backref.missing_named_group');
-        }
-
-        return self::$instances['BackrefMissingNamedGroup'];
+        return self::$instances['BackrefMissingNamedGroup'] ??= new self('BackrefMissingNamedGroup', 'regex.backref.missing_named_group');
     }
 
     public static function BackrefRelative(): self
     {
-        if (!isset(self::$instances['BackrefRelative'])) {
-            self::$instances['BackrefRelative'] = new self('BackrefRelative', 'regex.backref.relative');
-        }
-
-        return self::$instances['BackrefRelative'];
+        return self::$instances['BackrefRelative'] ??= new self('BackrefRelative', 'regex.backref.relative');
     }
 
     public static function BackrefZero(): self
     {
-        if (!isset(self::$instances['BackrefZero'])) {
-            self::$instances['BackrefZero'] = new self('BackrefZero', 'regex.backref.zero');
-        }
-
-        return self::$instances['BackrefZero'];
+        return self::$instances['BackrefZero'] ??= new self('BackrefZero', 'regex.backref.zero');
     }
 
     public static function CalloutInvalidDelimiter(): self
     {
-        if (!isset(self::$instances['CalloutInvalidDelimiter'])) {
-            self::$instances['CalloutInvalidDelimiter'] = new self('CalloutInvalidDelimiter', 'regex.callout.invalid_delimiter');
-        }
-
-        return self::$instances['CalloutInvalidDelimiter'];
+        return self::$instances['CalloutInvalidDelimiter'] ??= new self('CalloutInvalidDelimiter', 'regex.callout.invalid_delimiter');
     }
 
     public static function CalloutOutOfRange(): self
     {
-        if (!isset(self::$instances['CalloutOutOfRange'])) {
-            self::$instances['CalloutOutOfRange'] = new self('CalloutOutOfRange', 'regex.callout.out_of_range');
-        }
-
-        return self::$instances['CalloutOutOfRange'];
+        return self::$instances['CalloutOutOfRange'] ??= new self('CalloutOutOfRange', 'regex.callout.out_of_range');
     }
 
     public static function CalloutUnclosed(): self
     {
-        if (!isset(self::$instances['CalloutUnclosed'])) {
-            self::$instances['CalloutUnclosed'] = new self('CalloutUnclosed', 'regex.callout.unclosed');
-        }
-
-        return self::$instances['CalloutUnclosed'];
+        return self::$instances['CalloutUnclosed'] ??= new self('CalloutUnclosed', 'regex.callout.unclosed');
     }
 
     public static function CalloutUnclosedString(): self
     {
-        if (!isset(self::$instances['CalloutUnclosedString'])) {
-            self::$instances['CalloutUnclosedString'] = new self('CalloutUnclosedString', 'regex.callout.unclosed_string');
-        }
-
-        return self::$instances['CalloutUnclosedString'];
+        return self::$instances['CalloutUnclosedString'] ??= new self('CalloutUnclosedString', 'regex.callout.unclosed_string');
     }
 
     public static function CharclassInvalidEscape(): self
     {
-        if (!isset(self::$instances['CharclassInvalidEscape'])) {
-            self::$instances['CharclassInvalidEscape'] = new self('CharclassInvalidEscape', 'regex.charclass.invalid_escape');
-        }
-
-        return self::$instances['CharclassInvalidEscape'];
+        return self::$instances['CharclassInvalidEscape'] ??= new self('CharclassInvalidEscape', 'regex.charclass.invalid_escape');
     }
 
     public static function CharclassUnclosed(): self
     {
-        if (!isset(self::$instances['CharclassUnclosed'])) {
-            self::$instances['CharclassUnclosed'] = new self('CharclassUnclosed', 'regex.charclass.unclosed');
-        }
-
-        return self::$instances['CharclassUnclosed'];
+        return self::$instances['CharclassUnclosed'] ??= new self('CharclassUnclosed', 'regex.charclass.unclosed');
     }
 
     public static function CommentUnclosed(): self
     {
-        if (!isset(self::$instances['CommentUnclosed'])) {
-            self::$instances['CommentUnclosed'] = new self('CommentUnclosed', 'regex.comment.unclosed');
-        }
-
-        return self::$instances['CommentUnclosed'];
+        return self::$instances['CommentUnclosed'] ??= new self('CommentUnclosed', 'regex.comment.unclosed');
     }
 
     public static function Complexity(): self
     {
-        if (!isset(self::$instances['Complexity'])) {
-            self::$instances['Complexity'] = new self('Complexity', 'regex.complexity');
-        }
-
-        return self::$instances['Complexity'];
+        return self::$instances['Complexity'] ??= new self('Complexity', 'regex.complexity');
     }
 
     public static function ConditionalAssertionExpected(): self
     {
-        if (!isset(self::$instances['ConditionalAssertionExpected'])) {
-            self::$instances['ConditionalAssertionExpected'] = new self('ConditionalAssertionExpected', 'regex.conditional.assertion_expected');
-        }
-
-        return self::$instances['ConditionalAssertionExpected'];
+        return self::$instances['ConditionalAssertionExpected'] ??= new self('ConditionalAssertionExpected', 'regex.conditional.assertion_expected');
     }
 
     public static function ConditionalMissingGroup(): self
     {
-        if (!isset(self::$instances['ConditionalMissingGroup'])) {
-            self::$instances['ConditionalMissingGroup'] = new self('ConditionalMissingGroup', 'regex.conditional.missing_group');
-        }
-
-        return self::$instances['ConditionalMissingGroup'];
+        return self::$instances['ConditionalMissingGroup'] ??= new self('ConditionalMissingGroup', 'regex.conditional.missing_group');
     }
 
     public static function ConditionalUnclosed(): self
     {
-        if (!isset(self::$instances['ConditionalUnclosed'])) {
-            self::$instances['ConditionalUnclosed'] = new self('ConditionalUnclosed', 'regex.conditional.unclosed');
-        }
-
-        return self::$instances['ConditionalUnclosed'];
+        return self::$instances['ConditionalUnclosed'] ??= new self('ConditionalUnclosed', 'regex.conditional.unclosed');
     }
 
     public static function ConditionalVersionOperator(): self
     {
-        if (!isset(self::$instances['ConditionalVersionOperator'])) {
-            self::$instances['ConditionalVersionOperator'] = new self('ConditionalVersionOperator', 'regex.conditional.version_operator');
-        }
-
-        return self::$instances['ConditionalVersionOperator'];
+        return self::$instances['ConditionalVersionOperator'] ??= new self('ConditionalVersionOperator', 'regex.conditional.version_operator');
     }
 
     public static function ConditionalVersionSyntax(): self
     {
-        if (!isset(self::$instances['ConditionalVersionSyntax'])) {
-            self::$instances['ConditionalVersionSyntax'] = new self('ConditionalVersionSyntax', 'regex.conditional.version_syntax');
-        }
-
-        return self::$instances['ConditionalVersionSyntax'];
+        return self::$instances['ConditionalVersionSyntax'] ??= new self('ConditionalVersionSyntax', 'regex.conditional.version_syntax');
     }
 
     public static function ConditionalInvalid(): self
     {
-        if (!isset(self::$instances['ConditionalInvalid'])) {
-            self::$instances['ConditionalInvalid'] = new self('ConditionalInvalid', 'regex.conditional.invalid');
-        }
-
-        return self::$instances['ConditionalInvalid'];
+        return self::$instances['ConditionalInvalid'] ??= new self('ConditionalInvalid', 'regex.conditional.invalid');
     }
 
     public static function ConditionalTooManyBranches(): self
     {
-        if (!isset(self::$instances['ConditionalTooManyBranches'])) {
-            self::$instances['ConditionalTooManyBranches'] = new self('ConditionalTooManyBranches', 'regex.conditional.too_many_branches');
-        }
-
-        return self::$instances['ConditionalTooManyBranches'];
+        return self::$instances['ConditionalTooManyBranches'] ??= new self('ConditionalTooManyBranches', 'regex.conditional.too_many_branches');
     }
 
     public static function ControlCharInvalid(): self
     {
-        if (!isset(self::$instances['ControlCharInvalid'])) {
-            self::$instances['ControlCharInvalid'] = new self('ControlCharInvalid', 'regex.control_char.invalid');
-        }
-
-        return self::$instances['ControlCharInvalid'];
+        return self::$instances['ControlCharInvalid'] ??= new self('ControlCharInvalid', 'regex.control_char.invalid');
     }
 
     public static function DefineTooManyBranches(): self
     {
-        if (!isset(self::$instances['DefineTooManyBranches'])) {
-            self::$instances['DefineTooManyBranches'] = new self('DefineTooManyBranches', 'regex.define.too_many_branches');
-        }
-
-        return self::$instances['DefineTooManyBranches'];
+        return self::$instances['DefineTooManyBranches'] ??= new self('DefineTooManyBranches', 'regex.define.too_many_branches');
     }
 
     public static function DelimiterInvalid(): self
     {
-        if (!isset(self::$instances['DelimiterInvalid'])) {
-            self::$instances['DelimiterInvalid'] = new self('DelimiterInvalid', 'regex.delimiter.invalid');
-        }
-
-        return self::$instances['DelimiterInvalid'];
+        return self::$instances['DelimiterInvalid'] ??= new self('DelimiterInvalid', 'regex.delimiter.invalid');
     }
 
     public static function DelimiterUnclosed(): self
     {
-        if (!isset(self::$instances['DelimiterUnclosed'])) {
-            self::$instances['DelimiterUnclosed'] = new self('DelimiterUnclosed', 'regex.delimiter.unclosed');
-        }
-
-        return self::$instances['DelimiterUnclosed'];
+        return self::$instances['DelimiterUnclosed'] ??= new self('DelimiterUnclosed', 'regex.delimiter.unclosed');
     }
 
     public static function DelimiterUnescaped(): self
     {
-        if (!isset(self::$instances['DelimiterUnescaped'])) {
-            self::$instances['DelimiterUnescaped'] = new self('DelimiterUnescaped', 'regex.delimiter.unescaped');
-        }
-
-        return self::$instances['DelimiterUnescaped'];
+        return self::$instances['DelimiterUnescaped'] ??= new self('DelimiterUnescaped', 'regex.delimiter.unescaped');
     }
 
     public static function EncodingInvalidUtf8(): self
     {
-        if (!isset(self::$instances['EncodingInvalidUtf8'])) {
-            self::$instances['EncodingInvalidUtf8'] = new self('EncodingInvalidUtf8', 'regex.encoding.invalid_utf8');
-        }
-
-        return self::$instances['EncodingInvalidUtf8'];
+        return self::$instances['EncodingInvalidUtf8'] ??= new self('EncodingInvalidUtf8', 'regex.encoding.invalid_utf8');
     }
 
     public static function EscapeDigitsMissing(): self
     {
-        if (!isset(self::$instances['EscapeDigitsMissing'])) {
-            self::$instances['EscapeDigitsMissing'] = new self('EscapeDigitsMissing', 'regex.escape.digits_missing');
-        }
-
-        return self::$instances['EscapeDigitsMissing'];
+        return self::$instances['EscapeDigitsMissing'] ??= new self('EscapeDigitsMissing', 'regex.escape.digits_missing');
     }
 
     public static function EscapeSingleByteInUtf(): self
     {
-        if (!isset(self::$instances['EscapeSingleByteInUtf'])) {
-            self::$instances['EscapeSingleByteInUtf'] = new self('EscapeSingleByteInUtf', 'regex.escape.single_byte_in_utf');
-        }
-
-        return self::$instances['EscapeSingleByteInUtf'];
+        return self::$instances['EscapeSingleByteInUtf'] ??= new self('EscapeSingleByteInUtf', 'regex.escape.single_byte_in_utf');
     }
 
     public static function EscapeTrailingBackslash(): self
     {
-        if (!isset(self::$instances['EscapeTrailingBackslash'])) {
-            self::$instances['EscapeTrailingBackslash'] = new self('EscapeTrailingBackslash', 'regex.escape.trailing_backslash');
-        }
-
-        return self::$instances['EscapeTrailingBackslash'];
+        return self::$instances['EscapeTrailingBackslash'] ??= new self('EscapeTrailingBackslash', 'regex.escape.trailing_backslash');
     }
 
     public static function EscapeUnrecognized(): self
     {
-        if (!isset(self::$instances['EscapeUnrecognized'])) {
-            self::$instances['EscapeUnrecognized'] = new self('EscapeUnrecognized', 'regex.escape.unrecognized');
-        }
-
-        return self::$instances['EscapeUnrecognized'];
+        return self::$instances['EscapeUnrecognized'] ??= new self('EscapeUnrecognized', 'regex.escape.unrecognized');
     }
 
     public static function EscapeUnsupported(): self
     {
-        if (!isset(self::$instances['EscapeUnsupported'])) {
-            self::$instances['EscapeUnsupported'] = new self('EscapeUnsupported', 'regex.escape.unsupported');
-        }
-
-        return self::$instances['EscapeUnsupported'];
+        return self::$instances['EscapeUnsupported'] ??= new self('EscapeUnsupported', 'regex.escape.unsupported');
     }
 
     public static function ExtendedClassBesideLookbehind(): self
     {
-        if (!isset(self::$instances['ExtendedClassBesideLookbehind'])) {
-            self::$instances['ExtendedClassBesideLookbehind'] = new self('ExtendedClassBesideLookbehind', 'regex.extended_class.beside_lookbehind');
-        }
-
-        return self::$instances['ExtendedClassBesideLookbehind'];
+        return self::$instances['ExtendedClassBesideLookbehind'] ??= new self('ExtendedClassBesideLookbehind', 'regex.extended_class.beside_lookbehind');
     }
 
     public static function ExtendedClassBracketWithoutParen(): self
     {
-        if (!isset(self::$instances['ExtendedClassBracketWithoutParen'])) {
-            self::$instances['ExtendedClassBracketWithoutParen'] = new self('ExtendedClassBracketWithoutParen', 'regex.extended_class.bracket_without_paren');
-        }
-
-        return self::$instances['ExtendedClassBracketWithoutParen'];
+        return self::$instances['ExtendedClassBracketWithoutParen'] ??= new self('ExtendedClassBracketWithoutParen', 'regex.extended_class.bracket_without_paren');
     }
 
     public static function ExtendedClassEmptyExpression(): self
     {
-        if (!isset(self::$instances['ExtendedClassEmptyExpression'])) {
-            self::$instances['ExtendedClassEmptyExpression'] = new self('ExtendedClassEmptyExpression', 'regex.extended_class.empty_expression');
-        }
-
-        return self::$instances['ExtendedClassEmptyExpression'];
+        return self::$instances['ExtendedClassEmptyExpression'] ??= new self('ExtendedClassEmptyExpression', 'regex.extended_class.empty_expression');
     }
 
     public static function ExtendedClassMissingOperand(): self
     {
-        if (!isset(self::$instances['ExtendedClassMissingOperand'])) {
-            self::$instances['ExtendedClassMissingOperand'] = new self('ExtendedClassMissingOperand', 'regex.extended_class.missing_operand');
-        }
-
-        return self::$instances['ExtendedClassMissingOperand'];
+        return self::$instances['ExtendedClassMissingOperand'] ??= new self('ExtendedClassMissingOperand', 'regex.extended_class.missing_operand');
     }
 
     public static function ExtendedClassMissingOperator(): self
     {
-        if (!isset(self::$instances['ExtendedClassMissingOperator'])) {
-            self::$instances['ExtendedClassMissingOperator'] = new self('ExtendedClassMissingOperator', 'regex.extended_class.missing_operator');
-        }
-
-        return self::$instances['ExtendedClassMissingOperator'];
+        return self::$instances['ExtendedClassMissingOperator'] ??= new self('ExtendedClassMissingOperator', 'regex.extended_class.missing_operator');
     }
 
     public static function ExtendedClassNestedTooDeep(): self
     {
-        if (!isset(self::$instances['ExtendedClassNestedTooDeep'])) {
-            self::$instances['ExtendedClassNestedTooDeep'] = new self('ExtendedClassNestedTooDeep', 'regex.extended_class.nested_too_deep');
-        }
-
-        return self::$instances['ExtendedClassNestedTooDeep'];
+        return self::$instances['ExtendedClassNestedTooDeep'] ??= new self('ExtendedClassNestedTooDeep', 'regex.extended_class.nested_too_deep');
     }
 
     public static function ExtendedClassTooComplex(): self
     {
-        if (!isset(self::$instances['ExtendedClassTooComplex'])) {
-            self::$instances['ExtendedClassTooComplex'] = new self('ExtendedClassTooComplex', 'regex.extended_class.too_complex');
-        }
-
-        return self::$instances['ExtendedClassTooComplex'];
+        return self::$instances['ExtendedClassTooComplex'] ??= new self('ExtendedClassTooComplex', 'regex.extended_class.too_complex');
     }
 
     public static function ExtendedClassUnclosed(): self
     {
-        if (!isset(self::$instances['ExtendedClassUnclosed'])) {
-            self::$instances['ExtendedClassUnclosed'] = new self('ExtendedClassUnclosed', 'regex.extended_class.unclosed');
-        }
-
-        return self::$instances['ExtendedClassUnclosed'];
+        return self::$instances['ExtendedClassUnclosed'] ??= new self('ExtendedClassUnclosed', 'regex.extended_class.unclosed');
     }
 
     public static function ExtendedClassUnclosedParen(): self
     {
-        if (!isset(self::$instances['ExtendedClassUnclosedParen'])) {
-            self::$instances['ExtendedClassUnclosedParen'] = new self('ExtendedClassUnclosedParen', 'regex.extended_class.unclosed_paren');
-        }
-
-        return self::$instances['ExtendedClassUnclosedParen'];
+        return self::$instances['ExtendedClassUnclosedParen'] ??= new self('ExtendedClassUnclosedParen', 'regex.extended_class.unclosed_paren');
     }
 
     public static function ExtendedClassUnexpectedCharacter(): self
     {
-        if (!isset(self::$instances['ExtendedClassUnexpectedCharacter'])) {
-            self::$instances['ExtendedClassUnexpectedCharacter'] = new self('ExtendedClassUnexpectedCharacter', 'regex.extended_class.unexpected_character');
-        }
-
-        return self::$instances['ExtendedClassUnexpectedCharacter'];
+        return self::$instances['ExtendedClassUnexpectedCharacter'] ??= new self('ExtendedClassUnexpectedCharacter', 'regex.extended_class.unexpected_character');
     }
 
     public static function ExtendedClassUnmatchedClose(): self
     {
-        if (!isset(self::$instances['ExtendedClassUnmatchedClose'])) {
-            self::$instances['ExtendedClassUnmatchedClose'] = new self('ExtendedClassUnmatchedClose', 'regex.extended_class.unmatched_close');
-        }
-
-        return self::$instances['ExtendedClassUnmatchedClose'];
+        return self::$instances['ExtendedClassUnmatchedClose'] ??= new self('ExtendedClassUnmatchedClose', 'regex.extended_class.unmatched_close');
     }
 
     public static function FlagRemovedE(): self
     {
-        if (!isset(self::$instances['FlagRemovedE'])) {
-            self::$instances['FlagRemovedE'] = new self('FlagRemovedE', 'regex.flag.removed_e');
-        }
-
-        return self::$instances['FlagRemovedE'];
+        return self::$instances['FlagRemovedE'] ??= new self('FlagRemovedE', 'regex.flag.removed_e');
     }
 
     public static function FlagUnknown(): self
     {
-        if (!isset(self::$instances['FlagUnknown'])) {
-            self::$instances['FlagUnknown'] = new self('FlagUnknown', 'regex.flag.unknown');
-        }
-
-        return self::$instances['FlagUnknown'];
+        return self::$instances['FlagUnknown'] ??= new self('FlagUnknown', 'regex.flag.unknown');
     }
 
     public static function FormattingUnsafe(): self
     {
-        if (!isset(self::$instances['FormattingUnsafe'])) {
-            self::$instances['FormattingUnsafe'] = new self('FormattingUnsafe', 'regex.formatting.unsafe');
-        }
-
-        return self::$instances['FormattingUnsafe'];
+        return self::$instances['FormattingUnsafe'] ??= new self('FormattingUnsafe', 'regex.formatting.unsafe');
     }
 
     public static function GenerateNoMatch(): self
     {
-        if (!isset(self::$instances['GenerateNoMatch'])) {
-            self::$instances['GenerateNoMatch'] = new self('GenerateNoMatch', 'regex.generate.no_match');
-        }
-
-        return self::$instances['GenerateNoMatch'];
+        return self::$instances['GenerateNoMatch'] ??= new self('GenerateNoMatch', 'regex.generate.no_match');
     }
 
     public static function GroupDuplicateName(): self
     {
-        if (!isset(self::$instances['GroupDuplicateName'])) {
-            self::$instances['GroupDuplicateName'] = new self('GroupDuplicateName', 'regex.group.duplicate_name');
-        }
-
-        return self::$instances['GroupDuplicateName'];
+        return self::$instances['GroupDuplicateName'] ??= new self('GroupDuplicateName', 'regex.group.duplicate_name');
     }
 
     public static function GroupNameConflict(): self
     {
-        if (!isset(self::$instances['GroupNameConflict'])) {
-            self::$instances['GroupNameConflict'] = new self('GroupNameConflict', 'regex.group.name_conflict');
-        }
-
-        return self::$instances['GroupNameConflict'];
+        return self::$instances['GroupNameConflict'] ??= new self('GroupNameConflict', 'regex.group.name_conflict');
     }
 
     public static function GroupNameExpected(): self
     {
-        if (!isset(self::$instances['GroupNameExpected'])) {
-            self::$instances['GroupNameExpected'] = new self('GroupNameExpected', 'regex.group.name_expected');
-        }
-
-        return self::$instances['GroupNameExpected'];
+        return self::$instances['GroupNameExpected'] ??= new self('GroupNameExpected', 'regex.group.name_expected');
     }
 
     public static function GroupNameInvalid(): self
     {
-        if (!isset(self::$instances['GroupNameInvalid'])) {
-            self::$instances['GroupNameInvalid'] = new self('GroupNameInvalid', 'regex.group.name_invalid');
-        }
-
-        return self::$instances['GroupNameInvalid'];
+        return self::$instances['GroupNameInvalid'] ??= new self('GroupNameInvalid', 'regex.group.name_invalid');
     }
 
     public static function GroupNameTooLong(): self
     {
-        if (!isset(self::$instances['GroupNameTooLong'])) {
-            self::$instances['GroupNameTooLong'] = new self('GroupNameTooLong', 'regex.group.name_too_long');
-        }
-
-        return self::$instances['GroupNameTooLong'];
+        return self::$instances['GroupNameTooLong'] ??= new self('GroupNameTooLong', 'regex.group.name_too_long');
     }
 
     public static function GroupNameUnterminated(): self
     {
-        if (!isset(self::$instances['GroupNameUnterminated'])) {
-            self::$instances['GroupNameUnterminated'] = new self('GroupNameUnterminated', 'regex.group.name_unterminated');
-        }
-
-        return self::$instances['GroupNameUnterminated'];
+        return self::$instances['GroupNameUnterminated'] ??= new self('GroupNameUnterminated', 'regex.group.name_unterminated');
     }
 
     public static function GroupNestedTooDeep(): self
     {
-        if (!isset(self::$instances['GroupNestedTooDeep'])) {
-            self::$instances['GroupNestedTooDeep'] = new self('GroupNestedTooDeep', 'regex.group.nested_too_deep');
-        }
-
-        return self::$instances['GroupNestedTooDeep'];
+        return self::$instances['GroupNestedTooDeep'] ??= new self('GroupNestedTooDeep', 'regex.group.nested_too_deep');
     }
 
     public static function GroupNumberTooBig(): self
     {
-        if (!isset(self::$instances['GroupNumberTooBig'])) {
-            self::$instances['GroupNumberTooBig'] = new self('GroupNumberTooBig', 'regex.group.number_too_big');
-        }
-
-        return self::$instances['GroupNumberTooBig'];
+        return self::$instances['GroupNumberTooBig'] ??= new self('GroupNumberTooBig', 'regex.group.number_too_big');
     }
 
     public static function GroupOptionHyphen(): self
     {
-        if (!isset(self::$instances['GroupOptionHyphen'])) {
-            self::$instances['GroupOptionHyphen'] = new self('GroupOptionHyphen', 'regex.group.option_hyphen');
-        }
-
-        return self::$instances['GroupOptionHyphen'];
+        return self::$instances['GroupOptionHyphen'] ??= new self('GroupOptionHyphen', 'regex.group.option_hyphen');
     }
 
     public static function GroupSyntax(): self
     {
-        if (!isset(self::$instances['GroupSyntax'])) {
-            self::$instances['GroupSyntax'] = new self('GroupSyntax', 'regex.group.syntax');
-        }
-
-        return self::$instances['GroupSyntax'];
+        return self::$instances['GroupSyntax'] ??= new self('GroupSyntax', 'regex.group.syntax');
     }
 
     public static function GroupUnclosed(): self
     {
-        if (!isset(self::$instances['GroupUnclosed'])) {
-            self::$instances['GroupUnclosed'] = new self('GroupUnclosed', 'regex.group.unclosed');
-        }
-
-        return self::$instances['GroupUnclosed'];
+        return self::$instances['GroupUnclosed'] ??= new self('GroupUnclosed', 'regex.group.unclosed');
     }
 
     public static function GroupUnmatchedClose(): self
     {
-        if (!isset(self::$instances['GroupUnmatchedClose'])) {
-            self::$instances['GroupUnmatchedClose'] = new self('GroupUnmatchedClose', 'regex.group.unmatched_close');
-        }
-
-        return self::$instances['GroupUnmatchedClose'];
+        return self::$instances['GroupUnmatchedClose'] ??= new self('GroupUnmatchedClose', 'regex.group.unmatched_close');
     }
 
     public static function GroupListItemExpected(): self
     {
-        if (!isset(self::$instances['GroupListItemExpected'])) {
-            self::$instances['GroupListItemExpected'] = new self('GroupListItemExpected', 'regex.group_list.item_expected');
-        }
-
-        return self::$instances['GroupListItemExpected'];
+        return self::$instances['GroupListItemExpected'] ??= new self('GroupListItemExpected', 'regex.group_list.item_expected');
     }
 
     public static function GroupListMissingGroup(): self
     {
-        if (!isset(self::$instances['GroupListMissingGroup'])) {
-            self::$instances['GroupListMissingGroup'] = new self('GroupListMissingGroup', 'regex.group_list.missing_group');
-        }
-
-        return self::$instances['GroupListMissingGroup'];
+        return self::$instances['GroupListMissingGroup'] ??= new self('GroupListMissingGroup', 'regex.group_list.missing_group');
     }
 
     public static function GroupListRelativeZero(): self
     {
-        if (!isset(self::$instances['GroupListRelativeZero'])) {
-            self::$instances['GroupListRelativeZero'] = new self('GroupListRelativeZero', 'regex.group_list.relative_zero');
-        }
-
-        return self::$instances['GroupListRelativeZero'];
+        return self::$instances['GroupListRelativeZero'] ??= new self('GroupListRelativeZero', 'regex.group_list.relative_zero');
     }
 
     public static function InternalPcreFailure(): self
     {
-        if (!isset(self::$instances['InternalPcreFailure'])) {
-            self::$instances['InternalPcreFailure'] = new self('InternalPcreFailure', 'regex.internal.pcre_failure');
-        }
-
-        return self::$instances['InternalPcreFailure'];
+        return self::$instances['InternalPcreFailure'] ??= new self('InternalPcreFailure', 'regex.internal.pcre_failure');
     }
 
     public static function InternalUnexpectedState(): self
     {
-        if (!isset(self::$instances['InternalUnexpectedState'])) {
-            self::$instances['InternalUnexpectedState'] = new self('InternalUnexpectedState', 'regex.internal.unexpected_state');
-        }
-
-        return self::$instances['InternalUnexpectedState'];
+        return self::$instances['InternalUnexpectedState'] ??= new self('InternalUnexpectedState', 'regex.internal.unexpected_state');
     }
 
     public static function KeepInLookaround(): self
     {
-        if (!isset(self::$instances['KeepInLookaround'])) {
-            self::$instances['KeepInLookaround'] = new self('KeepInLookaround', 'regex.keep.in_lookaround');
-        }
-
-        return self::$instances['KeepInLookaround'];
+        return self::$instances['KeepInLookaround'] ??= new self('KeepInLookaround', 'regex.keep.in_lookaround');
     }
 
     public static function LookbehindTooComplex(): self
     {
-        if (!isset(self::$instances['LookbehindTooComplex'])) {
-            self::$instances['LookbehindTooComplex'] = new self('LookbehindTooComplex', 'regex.lookbehind.too_complex');
-        }
-
-        return self::$instances['LookbehindTooComplex'];
+        return self::$instances['LookbehindTooComplex'] ??= new self('LookbehindTooComplex', 'regex.lookbehind.too_complex');
     }
 
     public static function LookbehindTooLong(): self
     {
-        if (!isset(self::$instances['LookbehindTooLong'])) {
-            self::$instances['LookbehindTooLong'] = new self('LookbehindTooLong', 'regex.lookbehind.too_long');
-        }
-
-        return self::$instances['LookbehindTooLong'];
+        return self::$instances['LookbehindTooLong'] ??= new self('LookbehindTooLong', 'regex.lookbehind.too_long');
     }
 
     public static function LookbehindUnbounded(): self
     {
-        if (!isset(self::$instances['LookbehindUnbounded'])) {
-            self::$instances['LookbehindUnbounded'] = new self('LookbehindUnbounded', 'regex.lookbehind.unbounded');
-        }
-
-        return self::$instances['LookbehindUnbounded'];
+        return self::$instances['LookbehindUnbounded'] ??= new self('LookbehindUnbounded', 'regex.lookbehind.unbounded');
     }
 
     public static function LookbehindVariableLengthNotSupported(): self
     {
-        if (!isset(self::$instances['LookbehindVariableLengthNotSupported'])) {
-            self::$instances['LookbehindVariableLengthNotSupported'] = new self('LookbehindVariableLengthNotSupported', 'regex.lookbehind.variable_length_not_supported');
-        }
-
-        return self::$instances['LookbehindVariableLengthNotSupported'];
+        return self::$instances['LookbehindVariableLengthNotSupported'] ??= new self('LookbehindVariableLengthNotSupported', 'regex.lookbehind.variable_length_not_supported');
     }
 
     public static function NestingTooDeep(): self
     {
-        if (!isset(self::$instances['NestingTooDeep'])) {
-            self::$instances['NestingTooDeep'] = new self('NestingTooDeep', 'regex.nesting.too_deep');
-        }
-
-        return self::$instances['NestingTooDeep'];
+        return self::$instances['NestingTooDeep'] ??= new self('NestingTooDeep', 'regex.nesting.too_deep');
     }
 
     public static function OctalInvalidDigit(): self
     {
-        if (!isset(self::$instances['OctalInvalidDigit'])) {
-            self::$instances['OctalInvalidDigit'] = new self('OctalInvalidDigit', 'regex.octal.invalid_digit');
-        }
-
-        return self::$instances['OctalInvalidDigit'];
+        return self::$instances['OctalInvalidDigit'] ??= new self('OctalInvalidDigit', 'regex.octal.invalid_digit');
     }
 
     public static function OctalMissingBrace(): self
     {
-        if (!isset(self::$instances['OctalMissingBrace'])) {
-            self::$instances['OctalMissingBrace'] = new self('OctalMissingBrace', 'regex.octal.missing_brace');
-        }
-
-        return self::$instances['OctalMissingBrace'];
+        return self::$instances['OctalMissingBrace'] ??= new self('OctalMissingBrace', 'regex.octal.missing_brace');
     }
 
     public static function OctalOutOfRange(): self
     {
-        if (!isset(self::$instances['OctalOutOfRange'])) {
-            self::$instances['OctalOutOfRange'] = new self('OctalOutOfRange', 'regex.octal.out_of_range');
-        }
-
-        return self::$instances['OctalOutOfRange'];
+        return self::$instances['OctalOutOfRange'] ??= new self('OctalOutOfRange', 'regex.octal.out_of_range');
     }
 
     public static function PatternEmpty(): self
     {
-        if (!isset(self::$instances['PatternEmpty'])) {
-            self::$instances['PatternEmpty'] = new self('PatternEmpty', 'regex.pattern.empty');
-        }
-
-        return self::$instances['PatternEmpty'];
+        return self::$instances['PatternEmpty'] ??= new self('PatternEmpty', 'regex.pattern.empty');
     }
 
     public static function PatternNulByte(): self
     {
-        if (!isset(self::$instances['PatternNulByte'])) {
-            self::$instances['PatternNulByte'] = new self('PatternNulByte', 'regex.pattern.nul_byte');
-        }
-
-        return self::$instances['PatternNulByte'];
+        return self::$instances['PatternNulByte'] ??= new self('PatternNulByte', 'regex.pattern.nul_byte');
     }
 
     public static function PatternTooLarge(): self
     {
-        if (!isset(self::$instances['PatternTooLarge'])) {
-            self::$instances['PatternTooLarge'] = new self('PatternTooLarge', 'regex.pattern.too_large');
-        }
-
-        return self::$instances['PatternTooLarge'];
+        return self::$instances['PatternTooLarge'] ??= new self('PatternTooLarge', 'regex.pattern.too_large');
     }
 
     public static function PatternTooLong(): self
     {
-        if (!isset(self::$instances['PatternTooLong'])) {
-            self::$instances['PatternTooLong'] = new self('PatternTooLong', 'regex.pattern.too_long');
-        }
-
-        return self::$instances['PatternTooLong'];
+        return self::$instances['PatternTooLong'] ??= new self('PatternTooLong', 'regex.pattern.too_long');
     }
 
     public static function PcreRuntime(): self
     {
-        if (!isset(self::$instances['PcreRuntime'])) {
-            self::$instances['PcreRuntime'] = new self('PcreRuntime', 'regex.pcre.runtime');
-        }
-
-        return self::$instances['PcreRuntime'];
+        return self::$instances['PcreRuntime'] ??= new self('PcreRuntime', 'regex.pcre.runtime');
     }
 
     public static function PosixCollatingElement(): self
     {
-        if (!isset(self::$instances['PosixCollatingElement'])) {
-            self::$instances['PosixCollatingElement'] = new self('PosixCollatingElement', 'regex.posix.collating_element');
-        }
-
-        return self::$instances['PosixCollatingElement'];
+        return self::$instances['PosixCollatingElement'] ??= new self('PosixCollatingElement', 'regex.posix.collating_element');
     }
 
     public static function PosixInvalid(): self
     {
-        if (!isset(self::$instances['PosixInvalid'])) {
-            self::$instances['PosixInvalid'] = new self('PosixInvalid', 'regex.posix.invalid');
-        }
-
-        return self::$instances['PosixInvalid'];
+        return self::$instances['PosixInvalid'] ??= new self('PosixInvalid', 'regex.posix.invalid');
     }
 
     public static function PosixOutsideClass(): self
     {
-        if (!isset(self::$instances['PosixOutsideClass'])) {
-            self::$instances['PosixOutsideClass'] = new self('PosixOutsideClass', 'regex.posix.outside_class');
-        }
-
-        return self::$instances['PosixOutsideClass'];
+        return self::$instances['PosixOutsideClass'] ??= new self('PosixOutsideClass', 'regex.posix.outside_class');
     }
 
     public static function QuantifierInvalidRange(): self
     {
-        if (!isset(self::$instances['QuantifierInvalidRange'])) {
-            self::$instances['QuantifierInvalidRange'] = new self('QuantifierInvalidRange', 'regex.quantifier.invalid_range');
-        }
-
-        return self::$instances['QuantifierInvalidRange'];
+        return self::$instances['QuantifierInvalidRange'] ??= new self('QuantifierInvalidRange', 'regex.quantifier.invalid_range');
     }
 
     public static function QuantifierNothingToRepeat(): self
     {
-        if (!isset(self::$instances['QuantifierNothingToRepeat'])) {
-            self::$instances['QuantifierNothingToRepeat'] = new self('QuantifierNothingToRepeat', 'regex.quantifier.nothing_to_repeat');
-        }
-
-        return self::$instances['QuantifierNothingToRepeat'];
+        return self::$instances['QuantifierNothingToRepeat'] ??= new self('QuantifierNothingToRepeat', 'regex.quantifier.nothing_to_repeat');
     }
 
     public static function QuantifierTooBig(): self
     {
-        if (!isset(self::$instances['QuantifierTooBig'])) {
-            self::$instances['QuantifierTooBig'] = new self('QuantifierTooBig', 'regex.quantifier.too_big');
-        }
-
-        return self::$instances['QuantifierTooBig'];
+        return self::$instances['QuantifierTooBig'] ??= new self('QuantifierTooBig', 'regex.quantifier.too_big');
     }
 
     public static function RangeInvalidBounds(): self
     {
-        if (!isset(self::$instances['RangeInvalidBounds'])) {
-            self::$instances['RangeInvalidBounds'] = new self('RangeInvalidBounds', 'regex.range.invalid_bounds');
-        }
-
-        return self::$instances['RangeInvalidBounds'];
+        return self::$instances['RangeInvalidBounds'] ??= new self('RangeInvalidBounds', 'regex.range.invalid_bounds');
     }
 
     public static function RangeInvalidEnd(): self
     {
-        if (!isset(self::$instances['RangeInvalidEnd'])) {
-            self::$instances['RangeInvalidEnd'] = new self('RangeInvalidEnd', 'regex.range.invalid_end');
-        }
-
-        return self::$instances['RangeInvalidEnd'];
+        return self::$instances['RangeInvalidEnd'] ??= new self('RangeInvalidEnd', 'regex.range.invalid_end');
     }
 
     public static function RangeInvalidStart(): self
     {
-        if (!isset(self::$instances['RangeInvalidStart'])) {
-            self::$instances['RangeInvalidStart'] = new self('RangeInvalidStart', 'regex.range.invalid_start');
-        }
-
-        return self::$instances['RangeInvalidStart'];
+        return self::$instances['RangeInvalidStart'] ??= new self('RangeInvalidStart', 'regex.range.invalid_start');
     }
 
     public static function RangeReversed(): self
     {
-        if (!isset(self::$instances['RangeReversed'])) {
-            self::$instances['RangeReversed'] = new self('RangeReversed', 'regex.range.reversed');
-        }
-
-        return self::$instances['RangeReversed'];
+        return self::$instances['RangeReversed'] ??= new self('RangeReversed', 'regex.range.reversed');
     }
 
     public static function ScanSubstringMissingList(): self
     {
-        if (!isset(self::$instances['ScanSubstringMissingList'])) {
-            self::$instances['ScanSubstringMissingList'] = new self('ScanSubstringMissingList', 'regex.scan_substring.missing_list');
-        }
-
-        return self::$instances['ScanSubstringMissingList'];
+        return self::$instances['ScanSubstringMissingList'] ??= new self('ScanSubstringMissingList', 'regex.scan_substring.missing_list');
     }
 
     public static function SubroutineInvalidSyntax(): self
     {
-        if (!isset(self::$instances['SubroutineInvalidSyntax'])) {
-            self::$instances['SubroutineInvalidSyntax'] = new self('SubroutineInvalidSyntax', 'regex.subroutine.invalid_syntax');
-        }
-
-        return self::$instances['SubroutineInvalidSyntax'];
+        return self::$instances['SubroutineInvalidSyntax'] ??= new self('SubroutineInvalidSyntax', 'regex.subroutine.invalid_syntax');
     }
 
     public static function SubroutineMissingGroup(): self
     {
-        if (!isset(self::$instances['SubroutineMissingGroup'])) {
-            self::$instances['SubroutineMissingGroup'] = new self('SubroutineMissingGroup', 'regex.subroutine.missing_group');
-        }
-
-        return self::$instances['SubroutineMissingGroup'];
+        return self::$instances['SubroutineMissingGroup'] ??= new self('SubroutineMissingGroup', 'regex.subroutine.missing_group');
     }
 
     public static function SubroutineMissingNamedGroup(): self
     {
-        if (!isset(self::$instances['SubroutineMissingNamedGroup'])) {
-            self::$instances['SubroutineMissingNamedGroup'] = new self('SubroutineMissingNamedGroup', 'regex.subroutine.missing_named_group');
-        }
-
-        return self::$instances['SubroutineMissingNamedGroup'];
+        return self::$instances['SubroutineMissingNamedGroup'] ??= new self('SubroutineMissingNamedGroup', 'regex.subroutine.missing_named_group');
     }
 
     public static function SubroutineRecursion(): self
     {
-        if (!isset(self::$instances['SubroutineRecursion'])) {
-            self::$instances['SubroutineRecursion'] = new self('SubroutineRecursion', 'regex.subroutine.recursion');
-        }
-
-        return self::$instances['SubroutineRecursion'];
+        return self::$instances['SubroutineRecursion'] ??= new self('SubroutineRecursion', 'regex.subroutine.recursion');
     }
 
     public static function SubroutineRelativeMissing(): self
     {
-        if (!isset(self::$instances['SubroutineRelativeMissing'])) {
-            self::$instances['SubroutineRelativeMissing'] = new self('SubroutineRelativeMissing', 'regex.subroutine.relative_missing');
-        }
-
-        return self::$instances['SubroutineRelativeMissing'];
+        return self::$instances['SubroutineRelativeMissing'] ??= new self('SubroutineRelativeMissing', 'regex.subroutine.relative_missing');
     }
 
     public static function SubroutineRelativeZero(): self
     {
-        if (!isset(self::$instances['SubroutineRelativeZero'])) {
-            self::$instances['SubroutineRelativeZero'] = new self('SubroutineRelativeZero', 'regex.subroutine.relative_zero');
-        }
-
-        return self::$instances['SubroutineRelativeZero'];
+        return self::$instances['SubroutineRelativeZero'] ??= new self('SubroutineRelativeZero', 'regex.subroutine.relative_zero');
     }
 
     public static function TokenUnexpected(): self
     {
-        if (!isset(self::$instances['TokenUnexpected'])) {
-            self::$instances['TokenUnexpected'] = new self('TokenUnexpected', 'regex.token.unexpected');
-        }
-
-        return self::$instances['TokenUnexpected'];
+        return self::$instances['TokenUnexpected'] ??= new self('TokenUnexpected', 'regex.token.unexpected');
     }
 
     public static function TranspileUnsupported(): self
     {
-        if (!isset(self::$instances['TranspileUnsupported'])) {
-            self::$instances['TranspileUnsupported'] = new self('TranspileUnsupported', 'regex.transpile.unsupported');
-        }
-
-        return self::$instances['TranspileUnsupported'];
+        return self::$instances['TranspileUnsupported'] ??= new self('TranspileUnsupported', 'regex.transpile.unsupported');
     }
 
     public static function UnicodeInvalidDigit(): self
     {
-        if (!isset(self::$instances['UnicodeInvalidDigit'])) {
-            self::$instances['UnicodeInvalidDigit'] = new self('UnicodeInvalidDigit', 'regex.unicode.invalid_digit');
-        }
-
-        return self::$instances['UnicodeInvalidDigit'];
+        return self::$instances['UnicodeInvalidDigit'] ??= new self('UnicodeInvalidDigit', 'regex.unicode.invalid_digit');
     }
 
     public static function UnicodeOutOfRange(): self
     {
-        if (!isset(self::$instances['UnicodeOutOfRange'])) {
-            self::$instances['UnicodeOutOfRange'] = new self('UnicodeOutOfRange', 'regex.unicode.out_of_range');
-        }
-
-        return self::$instances['UnicodeOutOfRange'];
+        return self::$instances['UnicodeOutOfRange'] ??= new self('UnicodeOutOfRange', 'regex.unicode.out_of_range');
     }
 
     public static function UnicodePropertyInvalid(): self
     {
-        if (!isset(self::$instances['UnicodePropertyInvalid'])) {
-            self::$instances['UnicodePropertyInvalid'] = new self('UnicodePropertyInvalid', 'regex.unicode.property_invalid');
-        }
-
-        return self::$instances['UnicodePropertyInvalid'];
+        return self::$instances['UnicodePropertyInvalid'] ??= new self('UnicodePropertyInvalid', 'regex.unicode.property_invalid');
     }
 
     public static function UnicodePropertyMalformed(): self
     {
-        if (!isset(self::$instances['UnicodePropertyMalformed'])) {
-            self::$instances['UnicodePropertyMalformed'] = new self('UnicodePropertyMalformed', 'regex.unicode.property_malformed');
-        }
-
-        return self::$instances['UnicodePropertyMalformed'];
+        return self::$instances['UnicodePropertyMalformed'] ??= new self('UnicodePropertyMalformed', 'regex.unicode.property_malformed');
     }
 
     public static function UnicodeSurrogate(): self
     {
-        if (!isset(self::$instances['UnicodeSurrogate'])) {
-            self::$instances['UnicodeSurrogate'] = new self('UnicodeSurrogate', 'regex.unicode.surrogate');
-        }
-
-        return self::$instances['UnicodeSurrogate'];
+        return self::$instances['UnicodeSurrogate'] ??= new self('UnicodeSurrogate', 'regex.unicode.surrogate');
     }
 
     public static function UnicodeNamedRequiresUtf(): self
     {
-        if (!isset(self::$instances['UnicodeNamedRequiresUtf'])) {
-            self::$instances['UnicodeNamedRequiresUtf'] = new self('UnicodeNamedRequiresUtf', 'regex.unicode_named.requires_utf');
-        }
-
-        return self::$instances['UnicodeNamedRequiresUtf'];
+        return self::$instances['UnicodeNamedRequiresUtf'] ??= new self('UnicodeNamedRequiresUtf', 'regex.unicode_named.requires_utf');
     }
 
     public static function VerbConflictingCasings(): self
     {
-        if (!isset(self::$instances['VerbConflictingCasings'])) {
-            self::$instances['VerbConflictingCasings'] = new self('VerbConflictingCasings', 'regex.verb.conflicting_casings');
-        }
-
-        return self::$instances['VerbConflictingCasings'];
+        return self::$instances['VerbConflictingCasings'] ??= new self('VerbConflictingCasings', 'regex.verb.conflicting_casings');
     }
 
     public static function VerbInvalid(): self
     {
-        if (!isset(self::$instances['VerbInvalid'])) {
-            self::$instances['VerbInvalid'] = new self('VerbInvalid', 'regex.verb.invalid');
-        }
-
-        return self::$instances['VerbInvalid'];
+        return self::$instances['VerbInvalid'] ??= new self('VerbInvalid', 'regex.verb.invalid');
     }
 
     public static function VerbLimitTooLarge(): self
     {
-        if (!isset(self::$instances['VerbLimitTooLarge'])) {
-            self::$instances['VerbLimitTooLarge'] = new self('VerbLimitTooLarge', 'regex.verb.limit_too_large');
-        }
-
-        return self::$instances['VerbLimitTooLarge'];
+        return self::$instances['VerbLimitTooLarge'] ??= new self('VerbLimitTooLarge', 'regex.verb.limit_too_large');
     }
 
     public static function VerbMarkNameMissing(): self
     {
-        if (!isset(self::$instances['VerbMarkNameMissing'])) {
-            self::$instances['VerbMarkNameMissing'] = new self('VerbMarkNameMissing', 'regex.verb.mark_name_missing');
-        }
-
-        return self::$instances['VerbMarkNameMissing'];
+        return self::$instances['VerbMarkNameMissing'] ??= new self('VerbMarkNameMissing', 'regex.verb.mark_name_missing');
     }
 
     public static function VerbMisplaced(): self
     {
-        if (!isset(self::$instances['VerbMisplaced'])) {
-            self::$instances['VerbMisplaced'] = new self('VerbMisplaced', 'regex.verb.misplaced');
-        }
-
-        return self::$instances['VerbMisplaced'];
+        return self::$instances['VerbMisplaced'] ??= new self('VerbMisplaced', 'regex.verb.misplaced');
     }
 
     public static function VerbNameTooLong(): self
     {
-        if (!isset(self::$instances['VerbNameTooLong'])) {
-            self::$instances['VerbNameTooLong'] = new self('VerbNameTooLong', 'regex.verb.name_too_long');
-        }
-
-        return self::$instances['VerbNameTooLong'];
+        return self::$instances['VerbNameTooLong'] ??= new self('VerbNameTooLong', 'regex.verb.name_too_long');
     }
 
     public static function VerbTurkishCasingWithoutUtf(): self
     {
-        if (!isset(self::$instances['VerbTurkishCasingWithoutUtf'])) {
-            self::$instances['VerbTurkishCasingWithoutUtf'] = new self('VerbTurkishCasingWithoutUtf', 'regex.verb.turkish_casing_without_utf');
-        }
-
-        return self::$instances['VerbTurkishCasingWithoutUtf'];
+        return self::$instances['VerbTurkishCasingWithoutUtf'] ??= new self('VerbTurkishCasingWithoutUtf', 'regex.verb.turkish_casing_without_utf');
     }
 
     public static function VerbUnclosed(): self
     {
-        if (!isset(self::$instances['VerbUnclosed'])) {
-            self::$instances['VerbUnclosed'] = new self('VerbUnclosed', 'regex.verb.unclosed');
-        }
-
-        return self::$instances['VerbUnclosed'];
+        return self::$instances['VerbUnclosed'] ??= new self('VerbUnclosed', 'regex.verb.unclosed');
     }
 
     /**
@@ -1162,13 +700,12 @@ final class ErrorCode
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\ErrorCode');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for ErrorCode.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

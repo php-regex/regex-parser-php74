@@ -21,27 +21,25 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class QuantifierNode extends AbstractNode
 {
     /**
+     * The least and the most repetitions $quantifier reads as, null when it
+     * is no quantifier PCRE reads (a node built by hand may hold one).
      *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $node;
-
+    public ?QuantifierBounds $bounds;
     /**
-     *
-     * @var string
      */
-    public $quantifier;
-
+    public NodeInterface $node;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\QuantifierType
      */
-    public $type;
+    public string $quantifier;
+    /**
+     */
+    public QuantifierType $type;
 
     public function __construct(
         NodeInterface $node,
         string $quantifier,
-        $type,
+        QuantifierType $type,
         int $startPosition,
         int $endPosition
     ) {
@@ -49,6 +47,7 @@ final class QuantifierNode extends AbstractNode
         $this->quantifier = $quantifier;
         $this->type = $type;
         parent::__construct($startPosition, $endPosition);
+        $this->bounds = QuantifierBounds::parse($quantifier);
     }
 
     public function accept(NodeVisitorInterface $visitor)

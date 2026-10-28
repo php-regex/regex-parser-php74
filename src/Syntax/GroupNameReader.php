@@ -35,68 +35,51 @@ use PHPRegex\Parser\Token\TokenType;
 final class GroupNameReader
 {
     /**
-     * The longest name PCRE2 takes from 10.44, in code units; before, 32.
-     */
-    public const MAX_NAME_LENGTH = 128;
-
-    public const MAX_NAME_LENGTH_BEFORE_PCRE_1044 = 32;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\Token\TokenStream
-     */
-    private $stream;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
-    /**
      * The longest name the release read takes, in code units.
      *
-     *
-     * @var int
      */
-    private $maxNameLength;
+    private int $maxNameLength;
 
     /**
      * Whether a name is read whole before its length is judged, as from
      * PCRE2 10.33, and one too long refused where it ends; before, at the
      * character that takes it past the limit.
      *
-     *
-     * @var bool
      */
-    private $readsWhole;
+    private bool $readsWhole;
+    /**
+     * The longest name PCRE2 takes from 10.44, in code units; before, 32.
+     */
+    public const MAX_NAME_LENGTH = 128;
+    public const MAX_NAME_LENGTH_BEFORE_PCRE_1044 = 32;
 
     /**
      * The group numbers each name was given so far.
      *
      * @var array<string, list<int>>
      */
-    private $used = [];
+    private array $used = [];
 
     /**
      * The name each numbered group was given, when it has one.
      *
      * @var array<int, string>
      */
-    private $namesByNumber = [];
+    private array $namesByNumber = [];
 
-    /**
-     * @var bool
-     */
-    private $duplicatesAllowed = false;
+    private bool $duplicatesAllowed = false;
 
     /**
      * The release whose Unicode tables say which letters and digits a name
      * holds, or null when a name holds ASCII word characters only.
-     *
-     * @var \PHPRegex\Parser\PcreTarget|null
      */
-    private $unicodeTables;
+    private ?PcreTarget $unicodeTables = null;
+    /**
+     */
+    private TokenStream $stream;
+    /**
+     */
+    private PcreTarget $target;
 
     /**
      * @param PcreTarget $target the release the names are read for: how long
@@ -216,16 +199,7 @@ final class GroupNameReader
         if ($register && (null !== $quote || '>' === $this->stream->current()->value)) {
             if (null !== $number && $name !== ($this->namesByNumber[$number] ?? $name)) {
                 // Only a branch reset gives two groups the same number.
-                throw $this->error(
-                    \sprintf(
-                        'Different names for groups of the same number are not allowed: group %d is already named "%s", not "%s".',
-                        $number,
-                        $this->namesByNumber[$number],
-                        $name,
-                    ),
-                    ErrorCode::GroupNameConflict(),
-                    $nameEnd + 1,
-                );
+                throw $this->error(\sprintf('Different names for groups of the same number are not allowed: group %d is already named "%s", not "%s".', $number, $this->namesByNumber[$number], $name), ErrorCode::GroupNameConflict(), $nameEnd + 1);
             }
 
             // PCRE finds a duplicate once it has read the name and what
@@ -331,9 +305,9 @@ final class GroupNameReader
     public function nameFault(int $nameStart, int $stop): ErrorCode
     {
         switch (true) {
-            case $this->startsWithDigit($nameStart):
+            case true === $this->startsWithDigit($nameStart):
                 return ErrorCode::GroupNameInvalid();
-            case $stop === $nameStart:
+            case true === ($stop === $nameStart):
                 return ErrorCode::GroupNameExpected();
             default:
                 return ErrorCode::GroupNameUnterminated();
@@ -356,11 +330,11 @@ final class GroupNameReader
         }
 
         return $this->error(
-            (static function () use ($fault, $offset, $name) {
-                switch ($fault) {
-                    case ErrorCode::GroupNameExpected():
+            (function () use ($fault, $offset, $name) {
+                switch (true) {
+                    case $fault === ErrorCode::GroupNameExpected():
                         return \sprintf('Expected group name at position %d, found "%s".', $offset, $name);
-                    case ErrorCode::GroupNameUnterminated():
+                    case $fault === ErrorCode::GroupNameUnterminated():
                         return \sprintf('Invalid group name "%s": the name ends at position %d, and nothing closes it there.', $name, $offset);
                     default:
                         return \sprintf('Invalid group name "%s": names must contain only word characters and must not start with a digit.', $name);
@@ -429,21 +403,13 @@ final class GroupNameReader
     private function closeQuote(string $quote): void
     {
         if (!$this->stream->checkLiteral($quote)) {
-            throw $this->error(
-                \sprintf(
-                    'Expected closing quote "%s" for group name at position %d.',
-                    $quote,
-                    $this->stream->current()->position,
-                ),
-                ErrorCode::GroupNameUnterminated(),
-                $this->stream->current()->position,
-            );
+            throw $this->error(\sprintf('Expected closing quote "%s" for group name at position %d.', $quote, $this->stream->current()->position), ErrorCode::GroupNameUnterminated(), $this->stream->current()->position);
         }
 
         $this->stream->advance();
     }
 
-    private function error(string $message, $code, int $position): SyntaxErrorException
+    private function error(string $message, ErrorCode $code, int $position): SyntaxErrorException
     {
         return SyntaxErrorException::withContext($message, $code, $position, $this->stream->getPattern());
     }

@@ -21,6 +21,7 @@ use PHPRegex\Parser\Node\GroupType;
 use PHPRegex\Parser\PcreFeature;
 use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\Text\Ascii;
+use PHPRegex\Parser\Text\Utf8;
 
 /**
  * What "(*...)" holds.
@@ -35,6 +36,30 @@ use PHPRegex\Parser\Text\Ascii;
 final class PcreVerb
 {
     /**
+     */
+    public string $name;
+    /**
+     */
+    public ?GroupType $assertion = null;
+    /**
+     */
+    public ?string $payload = null;
+    /**
+     */
+    public ?int $matchLimit = null;
+    /**
+     */
+    public int $payloadOffset = 0;
+    /**
+     */
+    public bool $nonAtomic = false;
+    /**
+     */
+    public bool $atomicScriptRun = false;
+    /**
+     */
+    public ?string $scanSubstring = null;
+    /**
      * The letters of an alphabetic name, "(*pla:" or "(*atomic:".
      */
     public const LOWERCASE_NAME = 'abcdefghijklmnopqrstuvwxyz_';
@@ -43,6 +68,52 @@ final class PcreVerb
      * The characters "\w" stands for outside UTF mode.
      */
     public const WORD_NAME = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+
+    /**
+     * PCRE2 10.33+ alphabetic assertion verbs and their group equivalents.
+     *
+     * @var array<string, GroupType>|null
+     */
+    private static ?array $ASSERTIONS = null;
+
+    /**
+     * @return array<string, GroupType>
+     */
+    private static function ASSERTIONS(): array
+    {
+        return self::$ASSERTIONS ??= [
+            'positive_lookahead' => GroupType::LookaheadPositive(),
+            'pla' => GroupType::LookaheadPositive(),
+            'negative_lookahead' => GroupType::LookaheadNegative(),
+            'nla' => GroupType::LookaheadNegative(),
+            'positive_lookbehind' => GroupType::LookbehindPositive(),
+            'plb' => GroupType::LookbehindPositive(),
+            'negative_lookbehind' => GroupType::LookbehindNegative(),
+            'nlb' => GroupType::LookbehindNegative(),
+            'atomic' => GroupType::Atomic(),
+        ];
+    }
+
+    /**
+     * The non-atomic assertions: a lookaround PCRE may backtrack into. Only
+     * the positive ones exist.
+     *
+     * @var array<string, GroupType>|null
+     */
+    private static ?array $NON_ATOMIC_ASSERTIONS = null;
+
+    /**
+     * @return array<string, GroupType>
+     */
+    private static function NON_ATOMIC_ASSERTIONS(): array
+    {
+        return self::$NON_ATOMIC_ASSERTIONS ??= [
+            'non_atomic_positive_lookahead' => GroupType::LookaheadPositive(),
+            'napla' => GroupType::LookaheadPositive(),
+            'non_atomic_positive_lookbehind' => GroupType::LookbehindPositive(),
+            'naplb' => GroupType::LookbehindPositive(),
+        ];
+    }
 
     /**
      * The spellings of a script run, and whether its body is atomic.
@@ -54,89 +125,38 @@ final class PcreVerb
         'asr:' => true,
     ];
 
-    /**
-     *
-     * @var string
-     */
-    public $name;
-
-    /**
-     *
-     * @var \PHPRegex\Parser\Node\GroupType|null
-     */
-    public $assertion;
-
-    /**
-     *
-     * @var string|null
-     */
-    public $payload;
-
-    /**
-     *
-     * @var int|null
-     */
-    public $matchLimit;
-
-    /**
-     *
-     * @var int
-     */
-    public $payloadOffset = 0;
-
-    /**
-     *
-     * @var bool
-     */
-    public $nonAtomic = false;
-
-    /**
-     *
-     * @var bool
-     */
-    public $atomicScriptRun = false;
-
-    /**
-     *
-     * @var string|null
-     */
-    public $scanSubstring;
-
-    /**
-     * @param ?\PHPRegex\Parser\Node\GroupType::* $assertion
-     */
-    private function __construct(string $name, ?\PHPRegex\Parser\Node\GroupType $assertion = null, ?string $payload = null, ?int $matchLimit = null, int $payloadOffset = 0, bool $nonAtomic = false, bool $atomicScriptRun = false, ?string $scanSubstring = null)
+    private function __construct(string $name, ?GroupType $assertion = null, ?string $payload = null, ?int $matchLimit = null, int $payloadOffset = 0, bool $nonAtomic = false, bool $atomicScriptRun = false, ?string $scanSubstring = null)
     {
-        /*
+        /**
          * The verb as it should be recorded, which is not what was written
          * when the pattern used the "(*:name)" shorthand for a mark.
          */
         $this->name = $name;
-        /*
+        /**
          * The group an alphabetic assertion stands for, or null.
          */
         $this->assertion = $assertion;
-        /*
+        /**
          * The sub-pattern an assertion or a script run wraps, or null.
          */
         $this->payload = $payload;
-        /*
+        /**
          * The limit "(*LIMIT_MATCH=n)" sets, or null.
          */
         $this->matchLimit = $matchLimit;
-        /*
+        /**
          * Where the payload starts, relative to the verb text.
          */
         $this->payloadOffset = $payloadOffset;
-        /*
+        /**
          * Whether the assertion is non-atomic: "(*napla:...)", "(?*...)".
          */
         $this->nonAtomic = $nonAtomic;
-        /*
+        /**
          * Whether the script run's body is atomic: "(*asr:...)".
          */
         $this->atomicScriptRun = $atomicScriptRun;
-        /*
+        /**
          * "scs" or "scan_substring" as written, for a substring scan
          * "(*scs:(1)...)", PCRE2 10.45; null otherwise.
          */
@@ -262,7 +282,7 @@ final class PcreVerb
                 return [$at, ErrorCode::GroupUnclosed(), \sprintf('Missing ")" to close the list of groups at position %d.', $at)];
             }
 
-            $at++;
+            ++$at;
         }
     }
 
@@ -360,14 +380,15 @@ final class PcreVerb
      */
     public static function classicOpener(string $name): string
     {
-        switch (self::ASSERTIONS()[$name] ?? null) {
-            case GroupType::LookaheadPositive():
+        $matchSubject371 = self::ASSERTIONS()[$name] ?? null;
+        switch (true) {
+            case $matchSubject371 === GroupType::LookaheadPositive():
                 return '(?=';
-            case GroupType::LookaheadNegative():
+            case $matchSubject371 === GroupType::LookaheadNegative():
                 return '(?!';
-            case GroupType::LookbehindPositive():
+            case $matchSubject371 === GroupType::LookbehindPositive():
                 return '(?<=';
-            case GroupType::LookbehindNegative():
+            case $matchSubject371 === GroupType::LookbehindNegative():
                 return '(?<!';
             default:
                 return '(?>';
@@ -381,7 +402,7 @@ final class PcreVerb
      * PCRE stops after the "="; after digits, from PCRE2 10.45 on the first
      * other character, and before on the one after it.
      */
-    public static function limitValueErrorOffset(string $pattern, int $start, bool $pcre1045): ?int
+    public static function limitValueErrorOffset(string $pattern, int $start, PcreTarget $target): ?int
     {
         if (1 !== LibraryPcre::match('/\G\(\*LIMIT_(?:MATCH|HEAP|DEPTH|RECURSION)=/', $pattern, $matches, 0, $start)) {
             return null;
@@ -393,7 +414,7 @@ final class PcreVerb
             return $at;
         }
 
-        return ')' === ($pattern[$at + $digits] ?? '') ? null : $at + $digits + ($pcre1045 ? 0 : 1);
+        return ')' === ($pattern[$at + $digits] ?? '') ? null : $at + $digits + ($target->supports(PcreFeature::LimitValueErrorOnFaultingCharacter()) ? 0 : 1);
     }
 
     /**
@@ -406,11 +427,7 @@ final class PcreVerb
         // A limit is only read in the run of settings that opens the
         // pattern; elsewhere it is a verb PCRE does not know.
         LibraryPcre::match('/\A(?:\(\*[A-Z_]++(?:=\d*+)?\))*+/', $pattern, $settings);
-        $limit = $start > \strlen($settings[0] ?? '') ? null : self::limitValueErrorOffset(
-            $pattern,
-            $start,
-            $target->supports(PcreFeature::LimitValueErrorOnFaultingCharacter()),
-        );
+        $limit = $start > \strlen($settings[0] ?? '') ? null : self::limitValueErrorOffset($pattern, $start, $target);
         if (null !== $limit) {
             return $limit;
         }
@@ -437,7 +454,7 @@ final class PcreVerb
             return $nameEnd;
         }
 
-        return $nameEnd + ($utf && 1 === LibraryPcre::match('/\G./su', $pattern, $character, 0, $nameEnd) ? \strlen($character[0]) : 1);
+        return $nameEnd + ($utf ? Utf8::width($pattern, $nameEnd) : 1);
     }
 
     /**
@@ -502,47 +519,5 @@ final class PcreVerb
     public function isScriptRun(): bool
     {
         return null === $this->assertion && null !== $this->payload;
-    }
-
-    /**
-     * PCRE2 10.33+ alphabetic assertion verbs and their group equivalents.
-     */
-    private static function ASSERTIONS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                'positive_lookahead' => GroupType::LookaheadPositive(),
-                'pla' => GroupType::LookaheadPositive(),
-                'negative_lookahead' => GroupType::LookaheadNegative(),
-                'nla' => GroupType::LookaheadNegative(),
-                'positive_lookbehind' => GroupType::LookbehindPositive(),
-                'plb' => GroupType::LookbehindPositive(),
-                'negative_lookbehind' => GroupType::LookbehindNegative(),
-                'nlb' => GroupType::LookbehindNegative(),
-                'atomic' => GroupType::Atomic(),
-            ];
-        }
-
-        return $cache;
-    }
-
-    /**
-     * The non-atomic assertions: a lookaround PCRE may backtrack into. Only
-     * the positive ones exist.
-     */
-    private static function NON_ATOMIC_ASSERTIONS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                'non_atomic_positive_lookahead' => GroupType::LookaheadPositive(),
-                'napla' => GroupType::LookaheadPositive(),
-                'non_atomic_positive_lookbehind' => GroupType::LookbehindPositive(),
-                'naplb' => GroupType::LookbehindPositive(),
-            ];
-        }
-
-        return $cache;
     }
 }

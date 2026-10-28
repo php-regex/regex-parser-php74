@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 namespace PHPRegex\Parser\Exception;
 
+use PHPRegex\Parser\ErrorCode;
+
 /**
  * How an exception that shows the pattern is built: its snippet drawn
  * around the fault, the caret where the fault is shown.
@@ -32,7 +34,7 @@ trait PatternContextTrait
      */
     public function __construct(
         string $message,
-        $errorCode,
+        ErrorCode $errorCode,
         ?int $position = null,
         ?string $pattern = null,
         ?\Throwable $previous = null,
@@ -52,7 +54,7 @@ trait PatternContextTrait
      */
     public static function withContext(
         string $message,
-        $errorCode,
+        ErrorCode $errorCode,
         int $position,
         string $pattern,
         ?\Throwable $previous = null,

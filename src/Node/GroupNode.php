@@ -21,40 +21,25 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class GroupNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $child;
-
+    public NodeInterface $child;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\GroupType
      */
-    public $type;
-
+    public GroupType $type;
     /**
-     * @var string|null
-     *
      */
-    public $name;
-
+    public ?string $name = null;
     /**
-     *
-     * @var string|null
      */
-    public $flags;
-
+    public ?string $flags = null;
     /**
-     *
-     * @var bool
      */
-    public $usePythonSyntax = false;
-
+    public bool $usePythonSyntax = false;
     /**
      * @var list<string>
      *
      */
-    public $scannedGroups = [];
+    public array $scannedGroups = [];
 
     /**
      * @param string|null  $name          the group's name; for a substring scan,
@@ -65,7 +50,7 @@ final class GroupNode extends AbstractNode
      */
     public function __construct(
         NodeInterface $child,
-        $type,
+        GroupType $type,
         ?string $name = null,
         ?string $flags = null,
         int $startPosition = 0,

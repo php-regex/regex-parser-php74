@@ -21,10 +21,8 @@ namespace PHPRegex\Parser\Hir;
 final class AtomicHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $body;
+    public Hir $body;
 
     public function __construct(
         Hir $body,

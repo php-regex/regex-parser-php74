@@ -21,17 +21,16 @@ namespace PHPRegex\Parser\Hir;
  */
 final class CharSet
 {
+    /**
+     * @var list<array{int, int}>
+     *
+     */
+    public array $ranges;
     private const FIRST_PRINTABLE = 0x21;
 
     private const LAST_PRINTABLE = 0x7E;
 
     private const SPACE = 0x20;
-
-    /**
-     * @var list<array{int, int}>
-     *
-     */
-    public $ranges;
 
     /**
      * @param list<array{int, int}> $ranges
@@ -116,7 +115,7 @@ final class CharSet
             }
 
             $merged[] = [$from, $to];
-            $last++;
+            ++$last;
         }
 
         return new self($merged);
@@ -153,7 +152,7 @@ final class CharSet
             }
 
             $merged[] = $next;
-            $last++;
+            ++$last;
         }
 
         return new self($merged);
@@ -177,9 +176,9 @@ final class CharSet
             }
 
             if ($left[$i][1] < $right[$j][1]) {
-                $i++;
+                ++$i;
             } else {
-                $j++;
+                ++$j;
             }
         }
 
@@ -195,7 +194,7 @@ final class CharSet
 
         foreach ($this->ranges as [$from, $to]) {
             while ($j < $rightCount && $right[$j][1] < $from) {
-                $j++;
+                ++$j;
             }
 
             $current = $from;
@@ -206,7 +205,7 @@ final class CharSet
                 }
 
                 $current = max($current, $right[$k][1] + 1);
-                $k++;
+                ++$k;
             }
 
             if ($current <= $to) {

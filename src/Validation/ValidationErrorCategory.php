@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Validation;
 
 /**
- * Cached-instance twin of the ValidationErrorCategory enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The ValidationErrorCategory enum as a class of shared instances: ValidationErrorCategory::Syntax() returns
+ * the same instance at each call.
  */
-final class ValidationErrorCategory
+final class ValidationErrorCategory implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,38 +25,22 @@ final class ValidationErrorCategory
 
     public static function Syntax(): self
     {
-        if (!isset(self::$instances['Syntax'])) {
-            self::$instances['Syntax'] = new self('Syntax', 'syntax');
-        }
-
-        return self::$instances['Syntax'];
+        return self::$instances['Syntax'] ??= new self('Syntax', 'syntax');
     }
 
     public static function Semantic(): self
     {
-        if (!isset(self::$instances['Semantic'])) {
-            self::$instances['Semantic'] = new self('Semantic', 'semantic');
-        }
-
-        return self::$instances['Semantic'];
+        return self::$instances['Semantic'] ??= new self('Semantic', 'semantic');
     }
 
     public static function PcreRuntime(): self
     {
-        if (!isset(self::$instances['PcreRuntime'])) {
-            self::$instances['PcreRuntime'] = new self('PcreRuntime', 'pcre-runtime');
-        }
-
-        return self::$instances['PcreRuntime'];
+        return self::$instances['PcreRuntime'] ??= new self('PcreRuntime', 'pcre-runtime');
     }
 
     public static function Limit(): self
     {
-        if (!isset(self::$instances['Limit'])) {
-            self::$instances['Limit'] = new self('Limit', 'limit');
-        }
-
-        return self::$instances['Limit'];
+        return self::$instances['Limit'] ??= new self('Limit', 'limit');
     }
 
     /**
@@ -92,13 +58,12 @@ final class ValidationErrorCategory
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Validation\\ValidationErrorCategory');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for ValidationErrorCategory.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

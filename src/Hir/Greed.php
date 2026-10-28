@@ -2,70 +2,37 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Hir;
 
 /**
- * Cached-instance twin of the Greed enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The Greed enum as a class of shared instances: Greed::Greedy() returns
+ * the same instance at each call.
  */
-final class Greed
+final class Greed implements \PHPRegex\Parser\UnitEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
-
-    private function __construct(string $name, string $value)
+    private function __construct(string $name)
     {
         $this->name = $name;
-        $this->value = $value;
     }
 
     public static function Greedy(): self
     {
-        if (!isset(self::$instances['Greedy'])) {
-            self::$instances['Greedy'] = new self('Greedy', 'Greedy');
-        }
-
-        return self::$instances['Greedy'];
+        return self::$instances['Greedy'] ??= new self('Greedy');
     }
 
     public static function Lazy(): self
     {
-        if (!isset(self::$instances['Lazy'])) {
-            self::$instances['Lazy'] = new self('Lazy', 'Lazy');
-        }
-
-        return self::$instances['Lazy'];
+        return self::$instances['Lazy'] ??= new self('Lazy');
     }
 
     public static function Possessive(): self
     {
-        if (!isset(self::$instances['Possessive'])) {
-            self::$instances['Possessive'] = new self('Possessive', 'Possessive');
-        }
-
-        return self::$instances['Possessive'];
+        return self::$instances['Possessive'] ??= new self('Possessive');
     }
 
     /**

@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace PHPRegex\Parser\Cache;
 
+use PHPRegex\Parser\Exception\InvalidRegexOptionException;
 use PHPRegex\Parser\Node\RegexNode;
 
 /**
@@ -24,30 +25,27 @@ use PHPRegex\Parser\Node\RegexNode;
  */
 final class ArrayCache implements RemovableCacheInterface
 {
-    /**
-     *
-     * @var int
-     */
-    private $maxEntries = 1024;
+    private int $hits = 0;
 
-    /**
-     * @var int
-     */
-    private $hits = 0;
-
-    /**
-     * @var int
-     */
-    private $misses = 0;
+    private int $misses = 0;
 
     /**
      * @var array<string, RegexNode>
      */
-    private $trees = [];
+    private array $trees = [];
+    /**
+     */
+    private int $maxEntries = 1024;
 
+    /**
+     * @throws InvalidRegexOptionException when the cache would keep no tree: NullCache is the cache of none
+     */
     public function __construct(int $maxEntries = 1024)
     {
         $this->maxEntries = $maxEntries;
+        if ($maxEntries < 1) {
+            throw new InvalidRegexOptionException(\sprintf('An ArrayCache keeps at least 1 tree, %d given; NullCache keeps none.', $maxEntries));
+        }
     }
 
     #[\Override]
@@ -71,12 +69,12 @@ final class ArrayCache implements RemovableCacheInterface
     public function load(string $key): ?RegexNode
     {
         if (!isset($this->trees[$key])) {
-            $this->misses++;
+            ++$this->misses;
 
             return null;
         }
 
-        $this->hits++;
+        ++$this->hits;
         // Read again, it is the latest.
         $tree = $this->trees[$key];
         unset($this->trees[$key]);

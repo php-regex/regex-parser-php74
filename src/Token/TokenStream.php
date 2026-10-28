@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace PHPRegex\Parser\Token;
 
+use PHPRegex\Parser\ErrorCode;
 use PHPRegex\Parser\Exception\SyntaxErrorException;
 
 /**
@@ -26,27 +27,17 @@ use PHPRegex\Parser\Exception\SyntaxErrorException;
  */
 final class TokenStream
 {
+    private int $position = 0;
+
+    private int $maxPosition = 0;
     /**
      * @var list<Token>
      *
      */
-    private $tokens;
-
+    private array $tokens;
     /**
-     *
-     * @var string
      */
-    private $pattern;
-
-    /**
-     * @var int
-     */
-    private $position = 0;
-
-    /**
-     * @var int
-     */
-    private $maxPosition = 0;
+    private string $pattern;
 
     /**
      * @param list<Token> $tokens
@@ -81,10 +72,7 @@ final class TokenStream
 
         $newPosition = $this->position - $count;
         if ($newPosition < 0) {
-            throw new \LogicException(\sprintf(
-                'Cannot rewind %d tokens, would go before start of stream.',
-                $count,
-            ));
+            throw new \LogicException(\sprintf('Cannot rewind %d tokens, would go before start of stream.', $count));
         }
 
         $this->position = $newPosition;
@@ -96,11 +84,7 @@ final class TokenStream
     public function setPosition(int $position): void
     {
         if ($position < 0 || $position > $this->maxPosition + 1) {
-            throw new \LogicException(\sprintf(
-                'Position %d is out of bounds [0, %d].',
-                $position,
-                $this->maxPosition + 1,
-            ));
+            throw new \LogicException(\sprintf('Position %d is out of bounds [0, %d].', $position, $this->maxPosition + 1));
         }
 
         $this->position = $position;
@@ -152,10 +136,10 @@ final class TokenStream
     /**
      * Whether the token under the cursor has this type.
      *
-     * Past the end there is only TokenType::Eof(), which is what a parser
+     * Past the end there is only TokenType::Eof, which is what a parser
      * asking for it expects to find.
      */
-    public function check($type): bool
+    public function check(TokenType $type): bool
     {
         // The parser asks this once or more per token: the list is read
         // directly, past its end as on its end-of-pattern token.
@@ -165,7 +149,7 @@ final class TokenStream
     }
 
     /**
-     * The type of the token under the cursor; past the end, TokenType::Eof().
+     * The type of the token under the cursor; past the end, TokenType::Eof.
      */
     public function currentType(): TokenType
     {
@@ -185,7 +169,7 @@ final class TokenStream
     /**
      * Step over the token under the cursor if it has this type.
      */
-    public function match($type): bool
+    public function match(TokenType $type): bool
     {
         $token = $this->tokens[$this->position] ?? null;
         if (null === $token) {
@@ -198,7 +182,7 @@ final class TokenStream
 
         // The end-of-pattern token is never stepped over.
         if (TokenType::Eof() !== $type) {
-            $this->position++;
+            ++$this->position;
         }
 
         return true;
@@ -225,7 +209,7 @@ final class TokenStream
     {
         $token = $this->tokens[$this->position] ?? null;
         if (null !== $token && TokenType::Eof() !== $token->type) {
-            $this->position++;
+            ++$this->position;
         }
     }
 
@@ -241,17 +225,16 @@ final class TokenStream
     /**
      * Step over a token of this type, or say what was found instead.
      *
-     * @param mixed                         $code what is wrong with the pattern when the token is missing
-     * @param \PHPRegex\Parser\ErrorCode::* $code
+     * @param ErrorCode $code what is wrong with the pattern when the token is missing
      *
      * @throws SyntaxErrorException
      */
-    public function consume($type, string $error, $code): Token
+    public function consume(TokenType $type, string $error, ErrorCode $code): Token
     {
         $token = $this->tokens[$this->position] ?? null;
         if (null !== $token && $token->type === $type) {
             if (TokenType::Eof() !== $type) {
-                $this->position++;
+                ++$this->position;
             }
 
             return $token;
@@ -265,12 +248,11 @@ final class TokenStream
     /**
      * Step over this literal, or say what was found instead.
      *
-     * @param mixed                         $code what is wrong with the pattern when the literal is missing
-     * @param \PHPRegex\Parser\ErrorCode::* $code
+     * @param ErrorCode $code what is wrong with the pattern when the literal is missing
      *
      * @throws SyntaxErrorException
      */
-    public function consumeLiteral(string $value, string $error, $code): Token
+    public function consumeLiteral(string $value, string $error, ErrorCode $code): Token
     {
         if ($this->checkLiteral($value)) {
             $token = $this->current();
@@ -279,11 +261,7 @@ final class TokenStream
             return $token;
         }
 
-        throw $this->unexpected(
-            $error,
-            '(found '.$this->current()->type->value.' with value '.$this->current()->value.')',
-            $code,
-        );
+        throw $this->unexpected($error, '(found '.$this->current()->type->value.' with value '.$this->current()->value.')', $code);
     }
 
     public function isAtEnd(): bool
@@ -293,7 +271,7 @@ final class TokenStream
         return null === $token || TokenType::Eof() === $token->type;
     }
 
-    private function unexpected(string $error, string $found, $code): SyntaxErrorException
+    private function unexpected(string $error, string $found, ErrorCode $code): SyntaxErrorException
     {
         $at = $this->isAtEnd() ? 'end of input' : 'position '.$this->current()->position;
 

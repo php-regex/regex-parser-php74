@@ -22,28 +22,17 @@ use PHPRegex\Parser\Syntax\StartOptions;
 final class RegexNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $pattern;
-
+    public NodeInterface $pattern;
     /**
-     *
-     * @var string
      */
-    public $flags;
-
+    public string $flags;
     /**
-     *
-     * @var string
      */
-    public $delimiter;
-
+    public string $delimiter;
     /**
-     * @var string|null
-     *
      */
-    public $source;
+    public ?string $source = null;
 
     /**
      * @param string|null $source the pattern body the AST was parsed from,

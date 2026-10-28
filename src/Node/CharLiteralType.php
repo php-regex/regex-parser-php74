@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Node;
 
 /**
- * Cached-instance twin of the CharLiteralType enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The CharLiteralType enum as a class of shared instances: CharLiteralType::Unicode() returns
+ * the same instance at each call.
  */
-final class CharLiteralType
+final class CharLiteralType implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,38 +25,22 @@ final class CharLiteralType
 
     public static function Unicode(): self
     {
-        if (!isset(self::$instances['Unicode'])) {
-            self::$instances['Unicode'] = new self('Unicode', 'unicode');
-        }
-
-        return self::$instances['Unicode'];
+        return self::$instances['Unicode'] ??= new self('Unicode', 'unicode');
     }
 
     public static function UnicodeNamed(): self
     {
-        if (!isset(self::$instances['UnicodeNamed'])) {
-            self::$instances['UnicodeNamed'] = new self('UnicodeNamed', 'unicode_named');
-        }
-
-        return self::$instances['UnicodeNamed'];
+        return self::$instances['UnicodeNamed'] ??= new self('UnicodeNamed', 'unicode_named');
     }
 
     public static function Octal(): self
     {
-        if (!isset(self::$instances['Octal'])) {
-            self::$instances['Octal'] = new self('Octal', 'octal');
-        }
-
-        return self::$instances['Octal'];
+        return self::$instances['Octal'] ??= new self('Octal', 'octal');
     }
 
     public static function OctalLegacy(): self
     {
-        if (!isset(self::$instances['OctalLegacy'])) {
-            self::$instances['OctalLegacy'] = new self('OctalLegacy', 'octal_legacy');
-        }
-
-        return self::$instances['OctalLegacy'];
+        return self::$instances['OctalLegacy'] ??= new self('OctalLegacy', 'octal_legacy');
     }
 
     /**
@@ -92,13 +58,12 @@ final class CharLiteralType
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Node\\CharLiteralType');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for CharLiteralType.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

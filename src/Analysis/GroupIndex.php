@@ -46,50 +46,46 @@ final class GroupIndex
     /**
      * @var array<int, list<GroupNode>>
      */
-    private $byNumber = [];
+    private array $byNumber = [];
 
     /**
      * @var array<string, list<GroupNode>>
      */
-    private $byName = [];
+    private array $byName = [];
 
     /**
      * @var array<int, int> the number of each capturing group, by node
      */
-    private $numberOf = [];
+    private array $numberOf = [];
 
     /**
      * @var array<int, int> the number the next group would take where each
      *                      call, reference or "(*scs:" sits, by node
      */
-    private $nextNumberAt = [];
+    private array $nextNumberAt = [];
 
-    /**
-     * @var bool
-     */
-    private $hasBranchReset = false;
+    private bool $hasBranchReset = false;
 
     /**
      * @var list<int> the number of each capturing group, in pattern order
      */
-    private $captureSequence = [];
+    private array $captureSequence = [];
 
-    /**
-     * @var int
-     */
-    private $highestNumber = 0;
+    private int $highestNumber = 0;
 
     /**
      * @var list<SubroutineNode> the calls, recursion tests left out
      */
-    private $calls = [];
+    private array $calls = [];
 
     /**
      * @var array<int, true> the "(?(R1)" recursion tests, by node
      */
-    private $recursionTests = [];
+    private array $recursionTests = [];
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     public static function of(NodeInterface $pattern): self
     {
@@ -362,33 +358,26 @@ final class GroupIndex
         }
 
         switch (true) {
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 $children = $node->children;
-
                 break;
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 $children = $node->alternatives;
-
                 break;
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 $children = [$node->node];
-
                 break;
-            case $node instanceof ConditionalNode:
+            case true === $node instanceof ConditionalNode:
                 $children = [$node->condition, $node->yes, $node->no];
-
                 break;
-            case $node instanceof DefineNode:
+            case true === $node instanceof DefineNode:
                 $children = [$node->content];
-
                 break;
-            case $node instanceof ScriptRunNode && null !== $node->content:
+            case true === ($node instanceof ScriptRunNode && null !== $node->content):
                 $children = [$node->content];
-
                 break;
             default:
                 $children = [];
-
                 break;
         }
 

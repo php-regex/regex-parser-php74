@@ -21,22 +21,14 @@ namespace PHPRegex\Parser\Hir;
 final class CaptureHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\Hir
      */
-    public $body;
-
+    public Hir $body;
     /**
-     *
-     * @var int
      */
-    public $index;
-
+    public int $index;
     /**
-     *
-     * @var string|null
      */
-    public $name;
+    public ?string $name = null;
 
     public function __construct(
         Hir $body,

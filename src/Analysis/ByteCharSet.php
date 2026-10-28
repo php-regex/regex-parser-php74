@@ -20,19 +20,15 @@ namespace PHPRegex\Parser\Analysis;
  */
 final class ByteCharSet
 {
-    private const ASCII_MAX = 0x7F;
-
     /**
      * @var array<array{0: int, 1: int}>
      *
      */
-    private $ranges = [];
-
+    private array $ranges = [];
     /**
-     *
-     * @var bool
      */
-    private $unknown = false;
+    private bool $unknown = false;
+    private const ASCII_MAX = 0x7F;
 
     /**
      * @param array<array{0:int, 1:int}> $ranges inclusive ranges of byte values

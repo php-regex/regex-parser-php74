@@ -75,24 +75,20 @@ final class Utf8
         for ($offset = 0; $offset < $length;) {
             $byte = \ord($text[$offset]);
             switch (true) {
-                case $byte < 0x80:
+                case true === $byte < 0x80:
                     [$size, $codePoint] = [1, $byte];
-
                     break;
-                case $byte < 0xE0:
+                case true === $byte < 0xE0:
                     [$size, $codePoint] = [2, $byte & 0x1F];
-
                     break;
-                case $byte < 0xF0:
+                case true === $byte < 0xF0:
                     [$size, $codePoint] = [3, $byte & 0x0F];
-
                     break;
                 default:
                     [$size, $codePoint] = [4, $byte & 0x07];
-
                     break;
             }
-            for ($next = 1; $next < $size; $next++) {
+            for ($next = 1; $next < $size; ++$next) {
                 $codePoint = ($codePoint << 6) | (\ord($text[$offset + $next]) & 0x3F);
             }
 

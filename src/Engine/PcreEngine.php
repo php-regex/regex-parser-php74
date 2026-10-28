@@ -168,11 +168,11 @@ final class PcreEngine
     {
         $depth = 1;
         $length = \strlen($body);
-        for ($index = 0; $index < $length; $index++) {
+        for ($index = 0; $index < $length; ++$index) {
             $character = $body[$index];
             // The body PHP read never ends on a backslash it did not pair.
             if ('\\' === $character) {
-                $index++;
+                ++$index;
 
                 continue;
             }
@@ -182,7 +182,7 @@ final class PcreEngine
             }
 
             if ($open === $character) {
-                $depth++;
+                ++$depth;
             }
         }
 

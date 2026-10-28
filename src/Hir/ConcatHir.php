@@ -24,7 +24,7 @@ final class ConcatHir extends Hir
      * @var list<Hir>
      *
      */
-    public $parts;
+    public array $parts;
 
     /**
      * @param list<Hir> $parts

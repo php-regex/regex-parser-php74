@@ -19,22 +19,18 @@ namespace PHPRegex\Parser\Analysis;
 final class GroupNumbering
 {
     /**
-     *
-     * @var int
      */
-    public $maxGroupNumber;
-
+    public int $maxGroupNumber;
     /**
      * @var array<int>
      *
      */
-    public $captureSequence;
-
+    public array $captureSequence;
     /**
      * @var array<string, array<int>>
      *
      */
-    public $namedGroups;
+    public array $namedGroups;
 
     /**
      * @internal built by GroupNumberingCollector::collect()

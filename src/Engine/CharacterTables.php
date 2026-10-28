@@ -35,6 +35,20 @@ use PHPRegex\Parser\PcreTarget;
  */
 final class CharacterTables
 {
+    private static ?self $builtIn = null;
+    /**
+     * The tables read, by the locale name asked for and the one the C
+     * library gave: as many as there are locales named.
+     *
+     * @var array<string, self>
+     */
+    private static array $read = [];
+    /**
+     */
+    public string $locale;
+    /**
+     */
+    private string $casesBefore143;
     /**
      * The locale whose tables are PCRE2's own.
      */
@@ -98,38 +112,14 @@ final class CharacterTables
     private const MAX_NAME_LENGTH = 254;
 
     /**
-     * @var string
-     *
      */
-    public $locale;
-
-    /**
-     * @var string
-     *
-     */
-    private $casesBefore143;
-
-    /**
-     * @var string
-     *
-     */
-    private $casesFrom1043;
+    private string $casesFrom1043;
 
     /**
      * @var array<string, list<array{0: int, 1: int}>>
      *
      */
-    private $bytes;
-
-    private static $builtIn;
-
-    /**
-     * The tables read, by the locale name asked for and the one the C
-     * library gave: as many as there are locales named.
-     *
-     * @var array<string, self>
-     */
-    private static $read = [];
+    private array $bytes;
 
     /**
      * @param string                                     $locale         the name the C library gives the locale
@@ -153,12 +143,12 @@ final class CharacterTables
     {
         if (null === self::$builtIn) {
             $otherCases = '';
-            for ($byte = 0; $byte < 256; $byte++) {
-                $otherCases .= \chr((static function () use ($byte) {
+            for ($byte = 0; $byte < 256; ++$byte) {
+                $otherCases .= \chr((function () use ($byte) {
                     switch (true) {
-                        case $byte >= 0x41 && $byte <= 0x5A:
+                        case true === ($byte >= 0x41 && $byte <= 0x5A):
                             return $byte + 0x20;
-                        case $byte >= 0x61 && $byte <= 0x7A:
+                        case true === ($byte >= 0x61 && $byte <= 0x7A):
                             return $byte - 0x20;
                         default:
                             return $byte;
@@ -230,9 +220,49 @@ final class CharacterTables
     }
 
     /**
+     * Runs the read with the engine compiling under the locale's tables:
+     * LC_CTYPE set to the locale for the time of the read, then set back as
+     * the tables are read. Where the locale is the current one, the read
+     * runs as it is.
+     *
+     * @param \Closure(): void $read
+     *
+     * @throws InvalidRegexOptionException when the machine cannot set the locale
+     */
+    public static function under(string $locale, \Closure $read): void
+    {
+        if ($locale === self::current()) {
+            $read();
+
+            return;
+        }
+
+        self::withLocale($locale, static function () use ($read): void {
+            $read();
+        });
+    }
+
+    /**
      * @throws InvalidRegexOptionException when the machine cannot set the locale
      */
     private static function read(string $locale): self
+    {
+        $tables = self::builtIn();
+        self::withLocale($locale, static function (string $set) use (&$tables): void {
+            if (self::BUILT_IN !== $set) {
+                $tables = self::probe($set, self::readsOneByteACharacter());
+            }
+        });
+
+        return $tables;
+    }
+
+    /**
+     * @param \Closure(string): void $read given the name the C library gives the locale
+     *
+     * @throws InvalidRegexOptionException when the machine cannot set the locale
+     */
+    private static function withLocale(string $locale, \Closure $read): void
     {
         $refused = new InvalidRegexOptionException(\sprintf('"locale" names "%s", which this machine cannot set: install it, or name one that "locale -a" lists.', $locale));
         // "0" asks setlocale() for the current locale, and "" for the one
@@ -250,7 +280,7 @@ final class CharacterTables
                 throw $refused;
             }
 
-            return self::BUILT_IN === $set ? self::builtIn() : self::probe($set, self::readsOneByteACharacter());
+            $read($set);
         } finally {
             self::restore($previous, $before);
         }
@@ -288,7 +318,7 @@ final class CharacterTables
     private static function probe(string $locale = self::BUILT_IN, bool $oneByte = true): self
     {
         $subject = '';
-        for ($byte = 0; $byte < 256; $byte++) {
+        for ($byte = 0; $byte < 256; ++$byte) {
             $subject .= \chr($byte);
         }
 
@@ -299,7 +329,7 @@ final class CharacterTables
 
         $otherCases = $subject;
         foreach (array_merge($bytes['upper'] ?? [], $bytes['lower'] ?? []) as [$low, $high]) {
-            for ($byte = $low; $byte <= $high; $byte++) {
+            for ($byte = $low; $byte <= $high; ++$byte) {
                 // The class holds the byte, its other case, and the NUL byte
                 // with its own.
                 $held = (string) LibraryPcre::replace(\sprintf('/[^\x00\x%02x]/i', $byte), '', $subject);
@@ -317,7 +347,7 @@ final class CharacterTables
         $before = $from = $otherCases;
         $running = PcreTarget::runtime()->pcreAtLeast('10.43');
         foreach ($oneByte ? [] : $bytes['lower'] ?? [] as [$low, $high]) {
-            for ($byte = $low; $byte <= $high; $byte++) {
+            for ($byte = $low; $byte <= $high; ++$byte) {
                 $capital = mb_ord(mb_convert_case((string) mb_chr($byte, 'UTF-8'), \MB_CASE_UPPER_SIMPLE, 'UTF-8'), 'UTF-8');
                 if (false === $capital || $capital <= 0xFF) {
                     continue;
@@ -355,7 +385,7 @@ final class CharacterTables
         $ranges = [];
         $start = null;
         $end = -2;
-        for ($index = 0, $length = \strlen($held); $index < $length; $index++) {
+        for ($index = 0, $length = \strlen($held); $index < $length; ++$index) {
             $byte = \ord($held[$index]);
             if ($end + 1 !== $byte) {
                 if (null !== $start) {

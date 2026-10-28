@@ -22,10 +22,8 @@ namespace PHPRegex\Parser\Hir;
 final class ClassHir extends Hir
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Hir\CharSet
      */
-    public $set;
+    public CharSet $set;
 
     public function __construct(
         CharSet $set,

@@ -24,7 +24,7 @@ final class LiteralHir extends Hir
      * @var list<int>
      *
      */
-    public $codePoints;
+    public array $codePoints;
 
     /**
      * @param list<int> $codePoints

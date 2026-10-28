@@ -57,22 +57,33 @@ use PHPRegex\Parser\Token\TokenType;
 final class EscapeChecks
 {
     /**
-     * Script and property names newer than PCRE2 10.40, loosely spelled, with
-     * the release that brought them ("pcre2test -LS" and "-LP" of each).
+     * Whether the running engine compiles each property, by the escape that
+     * names it.
+     *
+     * @var array<string, bool>
      */
-    private const UNICODE_NAMES_SINCE = [
-        'kawi' => '10.43', 'nagmundari' => '10.43', 'nagm' => '10.43',
-        'garay' => '10.45', 'gara' => '10.45', 'gurungkhema' => '10.45', 'gukh' => '10.45',
-        'kiratrai' => '10.45', 'krai' => '10.45', 'olonal' => '10.45', 'onao' => '10.45',
-        'sunuwar' => '10.45', 'sunu' => '10.45', 'todhri' => '10.45', 'todr' => '10.45',
-        'tulutigalari' => '10.45', 'tutg' => '10.45',
-        'beriaerfe' => '10.48', 'berf' => '10.48', 'sidetic' => '10.48', 'sidt' => '10.48',
-        'taiyo' => '10.48', 'tayo' => '10.48', 'tolongsiki' => '10.48', 'tols' => '10.48',
-        'idcompatmathcontinue' => '10.45', 'idcompatmathstart' => '10.45',
-        'idsunaryoperator' => '10.45', 'idsu' => '10.45', 'incb' => '10.45',
-        'modifiercombiningmark' => '10.45', 'mcm' => '10.45',
-    ];
-
+    private static array $unicodePropCache = [];
+    /**
+     */
+    private PcreTarget $target;
+    /**
+     */
+    private ?string $pattern = null;
+    /**
+     */
+    private ?string $source = null;
+    /**
+     */
+    private int $offset = 0;
+    /**
+     */
+    private bool $utf = false;
+    /**
+     */
+    private bool $utfFlag = false;
+    /**
+     */
+    private bool $badEscapeIsLiteral = false;
     /**
      * The most characters PCRE reads of a braced property name.
      */
@@ -118,60 +129,8 @@ final class EscapeChecks
     private const REPEAT_COUNT = '/\G\{[ \t]*+(?:\d++[ \t]*+(?:,[ \t]*+\d*+[ \t]*+)?|,[ \t]*+\d++[ \t]*+)\}/';
 
     /**
-     * @var PcreTarget
-     *
      */
-    private $target;
-
-    /**
-     * @var string|null
-     *
-     */
-    private $pattern;
-
-    /**
-     * @var string|null
-     *
-     */
-    private $source;
-
-    /**
-     * @var int
-     *
-     */
-    private $offset = 0;
-
-    /**
-     * @var bool
-     *
-     */
-    private $utf = false;
-
-    /**
-     * @var bool
-     *
-     */
-    private $utfFlag = false;
-
-    /**
-     * @var bool
-     *
-     */
-    private $badEscapeIsLiteral = false;
-
-    /**
-     * @var PcreEngine
-     *
-     */
-    private $engine;
-
-    /**
-     * Whether the running engine compiles each property, by the escape that
-     * names it.
-     *
-     * @var array<string, bool>
-     */
-    private static $unicodePropCache = [];
+    private PcreEngine $engine;
 
     /**
      * @param PcreTarget  $target             the PHP and PCRE2 judged
@@ -306,18 +265,15 @@ final class EscapeChecks
                     );
                 }
 
-                switch ($token->type) {
-                    case TokenType::CharClassOpen():
+                switch (true) {
+                    case $token->type === TokenType::CharClassOpen():
                         $inClass = true;
-
                         break;
-                    case TokenType::CharClassClose():
+                    case $token->type === TokenType::CharClassClose():
                         $inClass = false;
-
                         break;
                     default:
                         $inClass = $inClass;
-
                         break;
                 }
                 $this->token($token, $source, $inClass, $endsRange);
@@ -378,27 +334,21 @@ final class EscapeChecks
             );
         }
 
-        switch ($letter) {
-            case 'o':
+        switch (true) {
+            case 'o' === $letter:
                 $this->validateOctalBraces($source, $end);
-
                 break;
-            case 'x':
+            case 'x' === $letter:
                 $this->validateHexBraces($source, $end);
-
                 break;
-            case 'N':
+            case 'N' === $letter:
                 $this->validateNamedCharacterBraces($source, $end);
-
                 break;
-            case 'p':
-            case 'P':
+            case 'p' === $letter:
+            case 'P' === $letter:
                 $this->raiseMalformedProperty($source, $letter, $end);
-
-                break;
+                // no break
             default:
-                null;
-
                 break;
         }
     }
@@ -458,11 +408,11 @@ final class EscapeChecks
             $braceError = null !== $this->source && '{' === ($this->source[$node->getEndPosition()] ?? '') ? NamedCharacterBrace::errorInClass($this->source, $node->getEndPosition(), $this->target) : null;
             if (null !== $braceError) {
                 $this->raise(
-                    (static function () use ($braceError) {
-                        switch ($braceError) {
-                            case ErrorCode::QuantifierTooBig():
+                    (function () use ($braceError) {
+                        switch (true) {
+                            case $braceError === ErrorCode::QuantifierTooBig():
                                 return 'Number too big in the count after \N: PCRE allows at most 65535 repetitions.';
-                            case ErrorCode::QuantifierInvalidRange():
+                            case $braceError === ErrorCode::QuantifierInvalidRange():
                                 return 'Invalid count after \N: min > max.';
                             default:
                                 return 'PCRE does not support the escape "\N{" (\F, \L, \l, \N{name}, \U and \u are not supported), in a character class either.';
@@ -520,23 +470,20 @@ final class EscapeChecks
             $this->validateHexBraces($this->source, $node->startPosition + 2);
         }
 
-        switch ($node->type) {
-            case CharLiteralType::Unicode():
+        switch (true) {
+            case $node->type === CharLiteralType::Unicode():
                 $this->validateUnicode($node);
-
                 break;
-            case CharLiteralType::Octal():
+            case $node->type === CharLiteralType::Octal():
                 $this->validateOctal($node);
-
                 break;
-            case CharLiteralType::OctalLegacy():
+            case $node->type === CharLiteralType::OctalLegacy():
                 $this->validateOctalLegacy($node);
-
                 break;
-            case CharLiteralType::UnicodeNamed():
-                null;
-
+            case $node->type === CharLiteralType::UnicodeNamed():
                 break;
+            default:
+                throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($node->type));
         }
 
         $this->validatePaddedBraces($node);
@@ -573,83 +520,137 @@ final class EscapeChecks
             }
         }
 
-        $prop = $node->prop;
-        $key = $node->hasBraces
-            ? 'p'.$prop
-            : ((\strlen($prop) > 1 || 0 === strncmp($prop, '^', strlen('^')))
-                ? 'p{'.$prop.'}'
-                : 'p'.$prop);
+        $key = $this->propertyKey($node);
+        [$name, $braced] = $this->propertyName($node);
+
+        // Another engine than the one that runs: the names of the release
+        // judged, whatever the running engine knows.
+        if (!$this->target->isRunningEngine()) {
+            $since = PropertyNames::firstReleaseKnowing($name, $braced);
+            if (null !== $since && $this->target->pcreAtLeast($since)) {
+                return;
+            }
+
+            if (null !== $since) {
+                $this->raise(
+                    \sprintf('Invalid or unsupported Unicode property: \\%s. It needs PCRE2 %s, and the target is PCRE2 %s.', $key, $since, $this->target->pcreVersion),
+                    $node->getEndPosition(),
+                    ErrorCode::UnicodePropertyInvalid(),
+                    \sprintf('Target a PHP whose PCRE2 is %s or later, or use another property.', $since),
+                );
+            }
+
+            $this->raiseCaretInPropertyName($node);
+            $this->raiseUnknownProperty($node, $key);
+        }
+
+        // A name a later release added, the running engine that old: said
+        // as for another engine, before what the name holds.
+        // The engine is asked about the escape as written: the node's name
+        // drops the spaces before a "^", which the engine may read apart.
+        $needs = PropertyNames::firstReleaseKnowing($name, $braced);
+        $written = null === $this->source ? $key : (string) substr($this->source, $node->startPosition + 1, $node->getEndPosition() - $node->startPosition - 1);
+        if (null !== $needs && !$this->target->pcreAtLeast($needs) && !$this->compilesProperty($written)) {
+            $this->raise(
+                \sprintf('Invalid or unsupported Unicode property: \\%s. It needs PCRE2 %s, and the target is PCRE2 %s.', $key, $needs, $this->target->pcreVersion),
+                $node->getEndPosition(),
+                ErrorCode::UnicodePropertyInvalid(),
+                \sprintf('Target a PHP whose PCRE2 is %s or later, or use another property.', $needs),
+            );
+        }
 
         // The name as the release reads it, past the "^" that negates: no
         // property name holds another "^". From PCRE2 10.45 the "^" may
         // follow spaces, hyphens or underscores.
-        $skippedCaret = null !== $this->nameAfterSkippedCaret($node);
+        $this->raiseCaretInPropertyName($node);
         $read = $node->hasBraces ? $this->negationRead($node) : null;
-        if (null !== $read) {
-            [$negated, $name] = $read;
-            if (false !== strpos($name, '^')) {
-                $this->raise(
-                    \sprintf('Invalid or unsupported Unicode property: \\%s: no property name holds a "^".', substr($this->source ?? '', $node->startPosition + 1, $node->getEndPosition() - $node->startPosition - 1)),
-                    $node->getEndPosition(),
-                    ErrorCode::UnicodePropertyInvalid(),
-                );
-            }
-
-            if ($skippedCaret) {
-                $key = 'p{'.($negated ? '^' : '').$name.'}';
-            }
+        if (null !== $read && null !== $this->nameAfterSkippedCaret($node)) {
+            $key = 'p{'.($read[0] ? '^' : '').$read[1].'}';
         }
 
+        if (!$this->compilesProperty($key)) {
+            $this->raiseUnknownProperty($node, $key);
+        }
+    }
+
+    /**
+     * The property as the engine is asked about it, after the backslash.
+     */
+    private function propertyKey(UnicodePropNode $node): string
+    {
+        $prop = $node->prop;
+
+        return $node->hasBraces
+            ? 'p'.$prop
+            : ((\strlen($prop) > 1 || 0 === strncmp($prop, '^', strlen('^')))
+                ? 'p{'.$prop.'}'
+                : 'p'.$prop);
+    }
+
+    /**
+     * Whether the running engine compiles the property, as written after
+     * the backslash, once per spelling.
+     */
+    private function compilesProperty(string $key): bool
+    {
         if (!isset(self::$unicodePropCache[$key])) {
             StaticCaches::register(self::class, \Closure::fromCallable([self::class, 'clearCaches']));
             self::$unicodePropCache = StaticCaches::makeRoom(self::$unicodePropCache);
             self::$unicodePropCache[$key] = $this->compiles($key);
         }
 
-        // The running engine answered; for another target, a name whose
-        // support arrived in a later release is judged by that release, both
-        // ways: known to the target, unknown to it.
-        $needs = $this->target->isRunningEngine() ? null : $this->releaseAddingProperty($node);
-        if (null !== $needs) {
-            if (!$this->target->pcreAtLeast($needs)) {
-                $this->raise(
-                    \sprintf('Invalid or unsupported Unicode property: \\%s. It needs PCRE2 %s, and the target is PCRE2 %s.', ltrim($key, '\\'), $needs, $this->target->pcreVersion),
-                    $node->getEndPosition(),
-                    ErrorCode::UnicodePropertyInvalid(),
-                    \sprintf('Target a PHP whose PCRE2 is %s or later, or use another property.', $needs),
-                );
-            }
+        return self::$unicodePropCache[$key];
+    }
 
-            // A "^" after skipped characters needs 10.45 only: the name
-            // after it is looked up, unless a later release added it.
-            if (!$skippedCaret || isset(self::UNICODE_NAMES_SINCE[self::looseName($read[1] ?? '')])) {
-                return;
-            }
-        }
+    /**
+     * What follows the letter of the property, as written: one letter, or
+     * the text between the braces, and whether it is braced. From the node
+     * when nothing says what was written.
+     *
+     * @return array{0: string, 1: bool}
+     */
+    private function propertyName(UnicodePropNode $node): array
+    {
+        $text = null === $this->source
+            ? $node->prop
+            : (string) substr($this->source, $node->startPosition + 2, $node->getEndPosition() - $node->startPosition - 2);
 
-        if (false === self::$unicodePropCache[$key]) {
-            // A name a later release added: the running engine is that old.
-            $needs = $this->releaseAddingProperty($node);
-            if (null !== $needs && !$this->target->pcreAtLeast($needs)) {
-                $this->raise(
-                    \sprintf('Invalid or unsupported Unicode property: \\%s.', $key),
-                    $node->getEndPosition(),
-                    ErrorCode::UnicodePropertyInvalid(),
-                    \sprintf('Target a PHP whose PCRE2 is %s or later, or use another property.', $needs),
-                );
-            }
+        return $node->hasBraces ? [(string) substr($text, 1, -1), true] : [$text, false];
+    }
 
-            $propertyKey = $this->extractUnicodePropertyKey($key);
-            $suggestion = $this->suggestUnicodeProperty($propertyKey);
-            $hint = null === $suggestion ? null : "Did you mean \\{$suggestion}?";
-            // PCRE reads the whole escape before it looks the name up.
+    /**
+     * Refuses a braced name that holds a "^" past the one that negates, as
+     * the release reads it: no property name holds one.
+     */
+    private function raiseCaretInPropertyName(UnicodePropNode $node): void
+    {
+        $read = $node->hasBraces ? $this->negationRead($node) : null;
+        if (null !== $read && false !== strpos($read[1], '^')) {
             $this->raise(
-                \sprintf('Invalid or unsupported Unicode property: \\%s.', $key).(null === $hint ? '' : ' '.$hint),
+                \sprintf('Invalid or unsupported Unicode property: \\%s: no property name holds a "^".', substr($this->source ?? '', $node->startPosition + 1, $node->getEndPosition() - $node->startPosition - 1)),
                 $node->getEndPosition(),
                 ErrorCode::UnicodePropertyInvalid(),
-                $hint,
             );
         }
+    }
+
+    /**
+     * Refuses a property no release knows, with a spelling that names it
+     * when there is one. PCRE reads the whole escape before it looks the
+     * name up.
+     *
+     * @return never
+     */
+    private function raiseUnknownProperty(UnicodePropNode $node, string $key)
+    {
+        $suggestion = $this->suggestUnicodeProperty($this->extractUnicodePropertyKey($key));
+        $hint = null === $suggestion ? null : "Did you mean \\{$suggestion}?";
+        $this->raise(
+            \sprintf('Invalid or unsupported Unicode property: \\%s.', $key).(null === $hint ? '' : ' '.$hint),
+            $node->getEndPosition(),
+            ErrorCode::UnicodePropertyInvalid(),
+            $hint,
+        );
     }
 
     /**
@@ -699,10 +700,10 @@ final class EscapeChecks
             $name = $source[$at] ?? '';
             $end = $at + 1;
         } else {
-            $at++;
+            ++$at;
             if ('^' === ($source[$at] ?? '')) {
                 $negated = true;
-                $at++;
+                ++$at;
             }
 
             $close = strpos($source, '}', $at);
@@ -731,6 +732,23 @@ final class EscapeChecks
 
         $unprefixed = LibraryPcre::replace('/^\s*+(?:sc|script|scx|script[\s_-]*+extensions)\s*+[:=]/i', '', $name) ?? $name;
         $spelling = PropertyNames::spellingBefore1040($unprefixed, $this->target);
+
+        // A name no release knows is refused as every release refuses it,
+        // and one a release after 10.40 added names that release.
+        $since = null === $spelling ? PropertyNames::firstReleaseKnowing(...$this->propertyName($node)) : '10.40';
+        if (null === $since) {
+            $this->raiseUnknownProperty($node, $this->propertyKey($node));
+        }
+
+        if ('10.40' !== $since) {
+            $this->raise(
+                \sprintf('Invalid or unsupported Unicode property: \\%s. It needs PCRE2 %s, and the target is PCRE2 %s.', substr($source, $node->startPosition + 1, $end - $node->startPosition - 1), $since, $this->target->pcreVersion),
+                $end,
+                ErrorCode::UnicodePropertyInvalid(),
+                \sprintf('Target a PHP whose PCRE2 is %s or later, or use another property.', $since),
+            );
+        }
+
         $this->raise(
             \sprintf('Invalid or unsupported Unicode property: \\%s. PCRE2 %s knows a property by one exact name only.', substr($source, $node->startPosition + 1, $end - $node->startPosition - 1), $this->target->pcreVersion),
             $end,
@@ -739,28 +757,6 @@ final class EscapeChecks
                 ? 'Spell the name as PCRE2 10.39 lists it, as "Greek" or "Lu", or target a PHP whose PCRE2 is 10.40 or later.'
                 : \sprintf('Write \\%s{%s%s}.', $letter, $negated ? '^' : '', $spelling),
         );
-    }
-
-    /**
-     * The PCRE2 release that brought the property or script "\p{...}"
-     * names, for a name whose support moved between releases; null for one
-     * every release knows or refuses alike.
-     */
-    private function releaseAddingProperty(UnicodePropNode $node): ?string
-    {
-        $negated = $this->nameAfterSkippedCaret($node);
-        if (null !== $negated) {
-            $since = self::UNICODE_NAMES_SINCE[self::looseName($negated)] ?? '10.45';
-
-            return version_compare($since, '10.45', '>') ? $since : '10.45';
-        }
-
-        $written = (string) substr($this->source ?? '', $node->startPosition, $node->getEndPosition() - $node->startPosition);
-        if (1 !== LibraryPcre::match('/^\\\\[pP]\{[ \t]*+\^?(.*)\}$/s', $written, $matches)) {
-            return null;
-        }
-
-        return self::UNICODE_NAMES_SINCE[self::looseName($matches[1])] ?? null;
     }
 
     /**
@@ -800,17 +796,6 @@ final class EscapeChecks
         }
 
         return [('P' === $letter) !== $caret, $name];
-    }
-
-    /**
-     * Loose matching: case, spaces, hyphens and underscores are ignored, and
-     * "sc=", "scx:" and their long forms only name the table.
-     */
-    private static function looseName(string $name): string
-    {
-        $name = Ascii::lower(str_replace([' ', "\t", '-', '_'], '', $name));
-
-        return LibraryPcre::replace('/^(?:sc|script|scx|scriptextensions)[:=]/', '', $name) ?? $name;
     }
 
     private function extractUnicodePropertyKey(string $key): string
@@ -880,7 +865,18 @@ final class EscapeChecks
      */
     private function compiles(string $key): bool
     {
-        return null === $this->engine->compile("/^\\{$key}$/u");
+        return null === $this->engine->compile(self::propertyProbe($key));
+    }
+
+    /**
+     * The pattern the property is probed with. X makes PHP 7.3 and 7.4,
+     * which compile without it under PCRE2_EXTRA_BAD_ESCAPE_IS_LITERAL,
+     * refuse an unknown name instead of reading its letters; from PHP 8.0
+     * it changes nothing.
+     */
+    private static function propertyProbe(string $key): string
+    {
+        return "/^\\{$key}$/uX";
     }
 
     private function validateUnicode(CharLiteralNode $node): void
@@ -964,7 +960,7 @@ final class EscapeChecks
         $value = 0;
         while (1 === strspn($text, $digits, $at, 1)) {
             $value = $value * $base + (int) hexdec($text[$at]);
-            $at++;
+            ++$at;
             if ($value > $max) {
                 $at += $padded ? strspn($text, self::BRACE_PADDING, $at) : 0;
 
@@ -1047,15 +1043,12 @@ final class EscapeChecks
         switch (true) {
             case CharLiteralType::Octal() === $node->type:
                 [$code, $escape] = [ErrorCode::OctalInvalidDigit(), '\o{}'];
-
                 break;
             case CharLiteralType::UnicodeNamed() === $node->type:
                 [$code, $escape] = [ErrorCode::UnicodeInvalidDigit(), '\N{U+}'];
-
                 break;
             default:
                 [$code, $escape] = [ErrorCode::UnicodeInvalidDigit(), '\x{}'];
-
                 break;
         }
 
@@ -1085,17 +1078,14 @@ final class EscapeChecks
         }
 
         switch (true) {
-            case $position >= \strlen($source):
+            case true === $position >= \strlen($source):
                 $offset = $position;
-
                 break;
-            case '{' === $source[$position]:
+            case true === ('{' === $source[$position]):
                 $offset = $this->malformedPropertyNameEnd($source, $position) ?? \strlen($source);
-
                 break;
             default:
                 $offset = $this->pastTheCharacter($source, $position);
-
                 break;
         }
 
@@ -1174,6 +1164,11 @@ final class EscapeChecks
                 continue;
             }
 
+            // A NUL byte ends the name, which no "}" closed.
+            if ("\0" === $char) {
+                return $position;
+            }
+
             if ('}' === $char) {
                 return null;
             }
@@ -1184,7 +1179,7 @@ final class EscapeChecks
                 return $position;
             }
 
-            $read++;
+            ++$read;
         }
 
         return $position;
@@ -1288,7 +1283,7 @@ final class EscapeChecks
         int $position,
         string $digits,
         bool $leadingPadding,
-        $invalidDigitCode,
+        ErrorCode $invalidDigitCode,
         string $escape
     ): void {
         $length = \strlen($source);
@@ -1414,8 +1409,8 @@ final class EscapeChecks
     /**
      * @return never
      */
-    private function raise(string $message, int $position, $code, ?string $hint = null)
+    private function raise(string $message, int $position, ErrorCode $code, ?string $hint = null)
     {
-        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, $hint);
+        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, null, $hint);
     }
 }

@@ -78,15 +78,15 @@ final class PatternParser
         if ($delimiter !== $closingDelimiter) {
             $endIndex = null;
             $depth = 1;
-            for ($k = 1; $k < $len; $k++) {
+            for ($k = 1; $k < $len; ++$k) {
                 $ch = $regex[$k];
                 if ('\\' === $ch) {
-                    $k++;
+                    ++$k;
 
                     continue;
                 }
                 if ($ch === $delimiter) {
-                    $depth++;
+                    ++$depth;
                 } elseif ($ch === $closingDelimiter && 0 === --$depth) {
                     $endIndex = $k;
 
@@ -98,9 +98,9 @@ final class PatternParser
             // escape, whatever construct it sits in: a class, a comment or a
             // \Q...\E run does not hide it, so "/[/]/" has the flags "]/".
             $endIndex = null;
-            for ($k = 1; $k < $len; $k++) {
+            for ($k = 1; $k < $len; ++$k) {
                 if ('\\' === $regex[$k]) {
-                    $k++;
+                    ++$k;
 
                     continue;
                 }
@@ -147,11 +147,7 @@ final class PatternParser
             // pattern as written, one character further for the
             // opening delimiter.
             if (false !== strpos($flags, $closingDelimiter)) {
-                throw new ParserException(\sprintf(
-                    'Unescaped delimiter "%1$s" at position %2$d ends the pattern early; what follows is read as modifiers. Escape it as "\\%1$s" or use another delimiter.',
-                    $closingDelimiter,
-                    $i - 1,
-                ), ErrorCode::DelimiterUnescaped(), $i - 1, $regex, null, $i);
+                throw new ParserException(\sprintf('Unescaped delimiter "%1$s" at position %2$d ends the pattern early; what follows is read as modifiers. Escape it as "\\%1$s" or use another delimiter.', $closingDelimiter, $i - 1), ErrorCode::DelimiterUnescaped(), $i - 1, $regex, null, $i);
             }
 
             $allowedPattern = '/^['.preg_quote($allowedFlags, '/').']*+$/';
@@ -167,7 +163,9 @@ final class PatternParser
                     throw self::nulByte($flagPosition, $regex);
                 }
 
-                if (false !== strpos((string) $invalid, 'e')) {
+                // PHP names the first modifier it refuses: the removed "e" only
+                // when it is that one.
+                if ('e' === ($flagsWithWhitespace[$faultyFlag] ?? '')) {
                     throw new ParserException('The \'e\' flag (preg_replace /e) was removed in PHP 7.0; use preg_replace_callback() instead.', ErrorCode::FlagRemovedE(), $flagPosition, $regex, null, $flagPosition + 1);
                 }
 
@@ -183,15 +181,7 @@ final class PatternParser
         $pattern = (string) substr($regex, 1);
         $suggested = self::suggestPattern($pattern, $delimiter);
 
-        throw new ParserException(\sprintf(
-            'No closing delimiter "%s" found. You opened with "%s"; expected closing "%s". Tip: escape "%s" inside the pattern (\\%s) or use a different delimiter, e.g. %s.',
-            $closingDelimiter,
-            $delimiter,
-            $closingDelimiter,
-            $closingDelimiter,
-            $closingDelimiter,
-            $suggested,
-        ), ErrorCode::DelimiterUnclosed());
+        throw new ParserException(\sprintf('No closing delimiter "%s" found. You opened with "%s"; expected closing "%s". Tip: escape "%s" inside the pattern (\\%s) or use a different delimiter, e.g. %s.', $closingDelimiter, $delimiter, $closingDelimiter, $closingDelimiter, $closingDelimiter, $suggested), ErrorCode::DelimiterUnclosed());
     }
 
     private static function nulByte(int $offset, string $regex): ParserException

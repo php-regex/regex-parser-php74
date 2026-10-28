@@ -40,10 +40,8 @@ final class ClassSetStore
     private const LAST_CODE_POINT = 0x10FFFF;
 
     /**
-     *
-     * @var string
      */
-    private $directory;
+    private string $directory;
 
     /**
      * @param string      $root   the directory the caller names

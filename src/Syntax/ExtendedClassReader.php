@@ -25,6 +25,7 @@ use PHPRegex\Parser\Node\ClassSetOperator;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\PcreFeature;
 use PHPRegex\Parser\PcreTarget;
+use PHPRegex\Parser\Text\Utf8;
 
 /**
  * Reads the expression of a Perl extended class "(?[...])", PCRE2 10.45,
@@ -38,90 +39,71 @@ use PHPRegex\Parser\PcreTarget;
  */
 final class ExtendedClassReader
 {
+    private int $at = 0;
+    private int $depth = 1;
+    private int $parentheses = 0;
+    /**
+     * @var list<NodeInterface> the operands read so far, which PCRE judges as it reads them
+     */
+    private array $operands = [];
+    private int $operations = 0;
+    /**
+     */
+    private int $length;
+    /**
+     */
+    private string $pattern;
+    /**
+     * @var \Closure(string, int):NodeInterface
+     *
+     */
+    private \Closure $escape;
     /**
      * The deepest nesting PCRE2 takes, "(?[" counting as the first level and
      * each "(" or nested "[" as one more.
      */
     private const MAX_DEPTH = 15;
+    /**
+     * @var array<string, ClassSetOperator>|null
+     */
+    private static ?array $OPERATORS = null;
 
     /**
-     *
-     * @var string
+     * @return array<string, ClassSetOperator>
      */
-    private $pattern;
-
+    private static function OPERATORS(): array
+    {
+        return self::$OPERATORS ??= [
+            '+' => ClassSetOperator::Union(),
+            '|' => ClassSetOperator::Union(),
+            '-' => ClassSetOperator::Difference(),
+            '^' => ClassSetOperator::SymmetricDifference(),
+        ];
+    }
     /**
      * @var \Closure(string, int):NodeInterface
      *
      */
-    private $escape;
-
-    /**
-     * @var \Closure(string, int):NodeInterface
-     *
-     */
-    private $class;
-
+    private \Closure $class;
     /**
      * @var \Closure(LexerException|LimitException|ParserException, int, list<NodeInterface>):never
      *
      */
-    private $fail;
-
+    private \Closure $fail;
     /**
-     * @var PcreTarget
-     *
      */
-    private $target;
-
+    private PcreTarget $target;
     /**
-     * @var bool
-     *
      */
-    private $utf = false;
-
+    private bool $utf = false;
     /**
-     * @var int
-     *
      */
-    private $maxOperations = 1024;
-
+    private int $maxOperations = 1024;
     /**
      * @var \Closure(int, int):void|null
      *
      */
-    private $nest;
-
-    /**
-     * @var int
-     */
-    private $at = 0;
-
-    /**
-     * @var int
-     */
-    private $depth = 1;
-
-    /**
-     * @var int
-     */
-    private $parentheses = 0;
-
-    /**
-     * @var list<NodeInterface> the operands read so far, which PCRE judges as it reads them
-     */
-    private $operands = [];
-
-    /**
-     * @var int
-     */
-    private $operations = 0;
-
-    /**
-     *
-     * @var int
-     */
-    private $length;
+    private ?\Closure $nest = null;
 
     /**
      * @param \Closure(string, int):NodeInterface                                                     $escape        reads an escape written at an offset
@@ -184,7 +166,7 @@ final class ExtendedClassReader
             $this->refuse('Missing "]" to close an extended class', ErrorCode::ExtendedClassUnclosed(), $this->length);
         }
 
-        $this->at++;
+        ++$this->at;
         if (')' !== ($this->pattern[$this->at] ?? '')) {
             $this->refuse('The "]" of an extended class must be followed by ")"', ErrorCode::ExtendedClassBracketWithoutParen(), $this->at);
         }
@@ -218,21 +200,6 @@ final class ExtendedClassReader
         return \strlen($escape[0] ?? '\\');
     }
 
-    private static function OPERATORS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                '+' => ClassSetOperator::Union(),
-                '|' => ClassSetOperator::Union(),
-                '-' => ClassSetOperator::Difference(),
-                '^' => ClassSetOperator::SymmetricDifference(),
-            ];
-        }
-
-        return $cache;
-    }
-
     /**
      * Past the blanks, "\E" and "\Q\E" at $at, which a class read under "xx"
      * skips.
@@ -258,11 +225,11 @@ final class ExtendedClassReader
         }
 
         $length = \strlen($pattern);
-        for ($at = $start + 2; $at < $length; $at++) {
+        for ($at = $start + 2; $at < $length; ++$at) {
             $char = $pattern[$at];
             $next = $pattern[$at + 1] ?? '';
             if ('\\' === $char && (']' === $next || '\\' === $next)) {
-                $at++;
+                ++$at;
             } elseif (('[' === $char && $terminator === $next) || ']' === $char) {
                 return null;
             } elseif ($terminator === $char && ']' === $next) {
@@ -320,7 +287,7 @@ final class ExtendedClassReader
                 return $at + 1;
             }
 
-            $at++;
+            ++$at;
         }
 
         return null;
@@ -341,7 +308,7 @@ final class ExtendedClassReader
             }
 
             $this->countOperation();
-            $this->at++;
+            ++$this->at;
             $right = $this->readIntersection(true);
             $left = new ClassSetOperationNode($operator, $left, $right, $char, $left->getStartPosition(), $right->getEndPosition());
         }
@@ -361,7 +328,7 @@ final class ExtendedClassReader
             }
 
             $this->countOperation();
-            $this->at++;
+            ++$this->at;
             $right = $this->readUnary(true);
             $left = new ClassSetOperationNode(ClassSetOperator::Intersection(), $left, $right, '&', $left->getStartPosition(), $right->getEndPosition());
         }
@@ -400,19 +367,19 @@ final class ExtendedClassReader
         $char = $this->pattern[$this->at] ?? '';
 
         switch (true) {
-            case '' === $char:
+            case true === ('' === $char):
                 return $this->refuse('Missing "]" to close an extended class', ErrorCode::ExtendedClassUnclosed(), $this->length);
-            case ']' === $char && $this->depth > 1:
+            case true === (']' === $char && $this->depth > 1):
                 return $this->refuse('Missing ")" in an extended class', ErrorCode::ExtendedClassUnclosedParen(), $this->at);
-            case ')' === $char && 1 === $this->depth:
+            case true === (')' === $char && 1 === $this->depth):
                 return $this->refuse('Unmatched ")" in an extended class', ErrorCode::ExtendedClassUnmatchedClose(), $this->at + 1);
-            case $afterOperator && (']' === $char || ')' === $char):
+            case true === ($afterOperator && (']' === $char || ')' === $char)):
                 return $this->refuse('Operand expected after an operator in an extended class', ErrorCode::ExtendedClassMissingOperand(), $this->at + 1);
-            case ']' === $char:
-            case ')' === $char:
+            case true === (']' === $char):
+            case true === (')' === $char):
                 return $this->refuse('Empty expression in an extended class', ErrorCode::ExtendedClassEmptyExpression(), $this->at + 1);
-            case isset(self::OPERATORS()[$char]):
-            case '&' === $char:
+            case true === isset(self::OPERATORS()[$char]):
+            case true === ('&' === $char):
                 return $this->refuse(\sprintf('Operator "%s" where an operand is due in an extended class', $char), ErrorCode::ExtendedClassMissingOperand(), $this->at + 1);
             default:
                 return $this->readOperand();
@@ -429,7 +396,7 @@ final class ExtendedClassReader
             if (null !== $this->nest) {
                 ($this->nest)($start + 1, ++$this->parentheses);
             }
-            $this->at++;
+            ++$this->at;
             if ($this->at >= $this->length) {
                 $this->refuse('Missing ")" in an extended class', ErrorCode::ExtendedClassUnclosedParen(), $this->length);
             }
@@ -445,9 +412,9 @@ final class ExtendedClassReader
                 $this->refuse('Missing ")" in an extended class', ErrorCode::ExtendedClassUnclosedParen(), $this->at);
             }
 
-            $this->at++;
-            $this->depth--;
-            $this->parentheses--;
+            ++$this->at;
+            --$this->depth;
+            --$this->parentheses;
 
             return $expression;
         }
@@ -461,7 +428,7 @@ final class ExtendedClassReader
             $end = $posixEnd ?? self::closedClassEnd($this->pattern, $start) ?? $this->refuseUnclosedClass($start);
             if (null === $posixEnd) {
                 $this->enter($start);
-                $this->depth--;
+                --$this->depth;
             }
 
             $this->at = $end;
@@ -499,17 +466,14 @@ final class ExtendedClassReader
         }
 
         switch (true) {
-            case '\\' === $char:
+            case true === ('\\' === $char):
                 $end = $this->at + self::escapeLength($this->pattern, $this->at, $this->utf);
-
                 break;
-            case '[' === $char && null !== self::posixFormEnd($this->pattern, $this->at):
+            case true === ('[' === $char && null !== self::posixFormEnd($this->pattern, $this->at)):
                 $end = (int) self::posixFormEnd($this->pattern, $this->at);
-
                 break;
             default:
                 $end = $this->pastCharacter($this->at);
-
                 break;
         }
 
@@ -541,11 +505,7 @@ final class ExtendedClassReader
      */
     private function pastCharacter(int $at): int
     {
-        if (!$this->utf || 1 !== LibraryPcre::match('/\G./su', $this->pattern, $character, 0, $at)) {
-            return $at + 1;
-        }
-
-        return $at + \strlen($character[0]);
+        return $at + ($this->utf ? Utf8::width($this->pattern, $at) : 1);
     }
 
     /**
@@ -625,7 +585,7 @@ final class ExtendedClassReader
     /**
      * @return never
      */
-    private function refuse(string $message, $code, int $position)
+    private function refuse(string $message, ErrorCode $code, int $position)
     {
         ($this->fail)(
             SyntaxErrorException::withContext(\sprintf('%s at position %d.', $message, $position), $code, $position, $this->pattern),

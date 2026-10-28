@@ -40,7 +40,6 @@ use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\QuantifierType;
 use PHPRegex\Parser\Node\RangeNode;
@@ -78,6 +77,48 @@ use PHPRegex\Parser\Text\Bytes;
  */
 final class CompiledLength
 {
+    /**
+     * Whether the measure passed the limit where a class was compiled, up to
+     * 10.47: see measureItems().
+     */
+    public bool $passedAtClassLists = false;
+    /**
+     * Where the first pass stops once it finds the pattern too large: past
+     * the item, the branch or the condition whose length takes it past the
+     * limit, so that nothing written from there on is read; out of the
+     * pattern where only the check made once it is read finds it, or where
+     * the limit is not passed.
+     */
+    public int $stoppedAt = \PHP_INT_MAX;
+    /**
+     * Whether a group of several branches was measured whole before the
+     * limit was passed, and may have passed it where it ends: its length is
+     * not known and its ceiling is past the limit, or not known either.
+     */
+    private bool $branchesMayEndPastTheLimit = false;
+    /**
+     * The captures open around the item measured, since the assertion it
+     * stands in: "(*ACCEPT)" closes each of them.
+     */
+    private int $openCaptures = 0;
+    /**
+     * The capturing groups open around the item measured, each with whether
+     * a back reference inside it names it: up to 10.34 such a group is
+     * wrapped in an atomic group.
+     *
+     * @var array<int, bool>
+     */
+    private array $openGroups = [];
+    /**
+     * The bytes of the lists the classes measured keep beside the code, from
+     * 10.45: counted once for each class written, against the limit too.
+     */
+    private int $charLists = 0;
+    /**
+     * Whether the source may set rules that change the cases of "i", "k"
+     * or "s", once read.
+     */
+    private ?bool $caseRulesVary = null;
     /**
      * The largest compiled pattern, in code units, with two-byte links.
      */
@@ -123,145 +164,32 @@ final class CompiledLength
     private const EMPTY_SCRIPT_RUNS = ['sr:' => 6, 'script_run:' => 6, 'asr:' => 12, 'atomic_script_run:' => 12];
 
     /**
-     * Whether the measure passed the limit where a class was compiled, up to
-     * 10.47: see measureItems().
-     *
-     * @var bool
-     */
-    public $passedAtClassLists = false;
-
-    /**
-     * Where the first pass stops once it finds the pattern too large: past
-     * the item, the branch or the condition whose length takes it past the
-     * limit, so that nothing written from there on is read; out of the
-     * pattern where only the check made once it is read finds it, or where
-     * the limit is not passed.
-     *
-     * @var int
-     */
-    public $stoppedAt = \PHP_INT_MAX;
-
-    /**
-     * @var \Closure(NodeInterface):int
-     *
-     */
-    private $floor;
-
-    /**
-     * @var string
-     *
-     */
-    private $source;
-
-    /**
-     * @var bool
-     *
-     */
-    private $utf;
-
-    /**
-     * @var bool
-     *
-     */
-    private $ucp;
-
-    /**
-     * @var string
-     *
-     */
-    private $flags;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
-    /**
-     * @var CharacterTables|null
-     *
-     */
-    private $tables;
-
-    /**
-     * Whether a group of several branches was measured whole before the
-     * limit was passed, and may have passed it where it ends: its length is
-     * not known and its ceiling is past the limit, or not known either.
-     *
-     * @var bool
-     */
-    private $branchesMayEndPastTheLimit = false;
-
-    /**
-     * The captures open around the item measured, since the assertion it
-     * stands in: "(*ACCEPT)" closes each of them.
-     *
-     * @var int
-     */
-    private $openCaptures = 0;
-
-    /**
-     * The capturing groups open around the item measured, each with whether
-     * a back reference inside it names it: up to 10.34 such a group is
-     * wrapped in an atomic group.
-     *
-     * @var array<int, bool>
-     */
-    private $openGroups = [];
-
-    /**
-     * The bytes of the lists the classes measured keep beside the code, from
-     * 10.45: counted once for each class written, against the limit too.
-     *
-     * @var int
-     */
-    private $charLists = 0;
-
-    /**
-     * Whether the source may set rules that change the cases of "i", "k"
-     * or "s", once read.
-     *
-     * @var bool|null
-     */
-    private $caseRulesVary;
-
-    /**
      * Whether the case rules kept to ASCII are in force where the item
      * measured is written: "r", "(*CASELESS_RESTRICT)", "(?r)" to the end
      * of its group.
-     *
-     * @var bool
      */
-    private $restricted = false;
+    private bool $restricted = false;
 
     /**
      * Whether Turkish case rules are set, "(*TURKISH_CASING)", once read.
-     *
-     * @var bool|null
      */
-    private $turkish;
+    private ?bool $turkish = null;
 
     /**
      * Whether the source may hold an inline "a", which keeps "\d", "\s" and
      * "\w" to ASCII under UCP, once read.
-     *
-     * @var bool|null
      */
-    private $asciiOptions;
+    private ?bool $asciiOptions = null;
 
     /**
      * The pattern measured, whose groups a lookbehind may call.
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface|null
      */
-    private $pattern;
+    private ?NodeInterface $pattern = null;
 
     /**
      * The measure of the lengths a lookbehind matches, once one is met.
-     *
-     * @var \PHPRegex\Parser\Analysis\LookbehindLength|null
      */
-    private $lookbehinds;
+    private ?LookbehindLength $lookbehinds = null;
 
     /**
      * Up to PCRE2 10.34, where the measure of lookbehinds stops and the
@@ -269,22 +197,18 @@ final class CompiledLength
      *
      * @var array{0: int, 1: array<int, GroupNode>, 2: bool}|null
      */
-    private $unmeasured;
+    private ?array $unmeasured = null;
 
     /**
      * Whether a class may read differently from its text, under "xx",
      * once read.
-     *
-     * @var bool|null
      */
-    private $spacesSkipped;
+    private ?bool $spacesSkipped = null;
 
     /**
      * The measure of classes, once one is met.
-     *
-     * @var \PHPRegex\Parser\Validation\ClassLength|null
      */
-    private $classes;
+    private ?ClassLength $classes = null;
 
     /**
      * The length of each class measured, the bytes of its lists and, up to
@@ -293,7 +217,7 @@ final class CompiledLength
      *
      * @var array<string, array{0: ?int, 1: int, 2: int}>
      */
-    private $classLengths = [];
+    private array $classLengths = [];
 
     /**
      * The class each extended class of a single item stands for, by the
@@ -303,37 +227,49 @@ final class CompiledLength
      *
      * @var array<int, array{0: ExtendedCharClassNode, 1: CharClassNode}>
      */
-    private $singleItemClasses = [];
+    private array $singleItemClasses = [];
 
     /**
      * Up to 10.47, the most the class last measured counts once its lists
      * are checked, those lists included.
-     *
-     * @var int
      */
-    private $listsPeak = 0;
+    private int $listsPeak = 0;
 
     /**
      * The members of each class read, by its text.
      *
      * @var array<string, array{0: list<int>, 1: list<array{0: int, 1: int}>, 2: list<array{0: int, 1: int}>}|null>
      */
-    private $members = [];
-
-    /**
-     * The least and the most of each quantifier read, by its text.
-     *
-     * @var array<string, array{0: int, 1: ?int}>
-     */
-    private $bounds = [];
+    private array $members = [];
 
     /**
      * The groups of the pattern measured, once a reference or a lookbehind
      * needs them.
-     *
-     * @var \PHPRegex\Parser\Analysis\GroupIndex|null
      */
-    private $groups;
+    private ?GroupIndex $groups = null;
+    /**
+     * @var \Closure(NodeInterface):int
+     *
+     */
+    private \Closure $floor;
+    /**
+     */
+    private string $source;
+    /**
+     */
+    private bool $utf;
+    /**
+     */
+    private bool $ucp;
+    /**
+     */
+    private string $flags;
+    /**
+     */
+    private PcreTarget $target;
+    /**
+     */
+    private ?CharacterTables $tables = null;
 
     /**
      * @param \Closure(NodeInterface): int $floor  the fewest units a node may
@@ -607,17 +543,14 @@ final class CompiledLength
         $open = $this->openCaptures;
         $capture = $repeated instanceof GroupNode && \in_array($repeated->type, [GroupType::Capturing(), GroupType::Named()], true);
         switch (true) {
-            case $capture:
+            case true === $capture:
                 $this->openCaptures = $open + 1;
-
                 break;
-            case $repeated instanceof GroupNode && \in_array($repeated->type, [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative(), GroupType::ScanSubstring()], true):
+            case true === ($repeated instanceof GroupNode && \in_array($repeated->type, [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative(), GroupType::ScanSubstring()], true)):
                 $this->openCaptures = 0;
-
                 break;
             default:
                 $this->openCaptures = $open;
-
                 break;
         }
         if ($capture) {
@@ -676,24 +609,26 @@ final class CompiledLength
     private function groupOf(NodeInterface $node, bool $caseless): ?array
     {
         if ($node instanceof GroupNode) {
-            switch ($node->type) {
-                case GroupType::Capturing():
-                case GroupType::Named():
+            switch (true) {
+                case $node->type === GroupType::Capturing():
+                case $node->type === GroupType::Named():
                     return [self::branchesOf($node->child), [self::BRACKETS + 2, self::BRACKETS + 2], $caseless, null];
-                case GroupType::NonCapturing():
-                case GroupType::Atomic():
-                case GroupType::BranchReset():
+                case $node->type === GroupType::NonCapturing():
+                case $node->type === GroupType::Atomic():
+                case $node->type === GroupType::BranchReset():
                     return [self::branchesOf($node->child), [self::BRACKETS, self::BRACKETS], $caseless, null];
-                case GroupType::InlineFlags():
+                case $node->type === GroupType::InlineFlags():
                     return [self::branchesOf($node->child), [self::BRACKETS, self::BRACKETS], self::caselessAfter((string) $node->flags, $caseless), null];
-                case GroupType::LookaheadPositive():
-                case GroupType::LookaheadNegative():
+                case $node->type === GroupType::LookaheadPositive():
+                case $node->type === GroupType::LookaheadNegative():
                     return [self::branchesOf($node->child), [self::BRACKETS, self::BRACKETS], $caseless, null];
-                case GroupType::LookbehindPositive():
-                case GroupType::LookbehindNegative():
+                case $node->type === GroupType::LookbehindPositive():
+                case $node->type === GroupType::LookbehindNegative():
                     return [$branches = self::branchesOf($node->child), $this->lookbehindFrame($node, $branches), $caseless, null];
-                case GroupType::ScanSubstring():
+                case $node->type === GroupType::ScanSubstring():
                     return [self::branchesOf($node->child), $this->scanSubstringFrame($node), $caseless, null];
+                default:
+                    throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($node->type));
             }
         }
 
@@ -710,18 +645,14 @@ final class CompiledLength
             }
 
             switch (true) {
-                case $condition instanceof VersionConditionNode:
+                case true === $condition instanceof VersionConditionNode:
                     $length = 1;
-
                     break;
-                case ($condition instanceof BackrefNode && 1 === LibraryPcre::match('/^[+-]?\d++$/', $condition->ref))
-                    || ($condition instanceof SubroutineNode && 1 === LibraryPcre::match('/^R\d*+$/', $condition->reference)):
+                case true === ($condition instanceof BackrefNode && 1 === LibraryPcre::match('/^[+-]?\d++$/', $condition->ref) || $condition instanceof SubroutineNode && 1 === LibraryPcre::match('/^R\d*+$/', $condition->reference)):
                     $length = 3;
-
                     break;
                 default:
                     $length = $this->namedConditionLength($condition);
-
                     break;
             }
 
@@ -735,7 +666,7 @@ final class CompiledLength
 
         if ($node instanceof ScriptRunNode && null !== $node->content) {
             // An atomic script run is a script run inside an atomic group.
-            return [self::branchesOf($node->content), $node->atomic ? [2 * self::BRACKETS, 2 * self::BRACKETS] : [self::BRACKETS, self::BRACKETS], $caseless, null];
+            return [self::branchesOf($node->content), $node->isAtomic ? [2 * self::BRACKETS, 2 * self::BRACKETS] : [self::BRACKETS, self::BRACKETS], $caseless, null];
         }
 
         return null;
@@ -750,7 +681,7 @@ final class CompiledLength
      */
     private function groupRepeat(QuantifierNode $node, NodeInterface $repeated): ?\Closure
     {
-        [$min, $max] = $this->boundsOf($node);
+        [$min, $max] = self::boundsOf($node);
         $possessive = QuantifierType::Possessive() === $node->type;
         $atomicOnce = $this->target->supports(PcreFeature::PossessiveRepeatOnceIsAtomic());
         if ($repeated instanceof GroupNode) {
@@ -799,7 +730,7 @@ final class CompiledLength
         }
 
         if (0 === $min) {
-            return self::cap((static function () use ($max, $copy, $conditional, $wrap) {
+            return self::cap((function () use ($max, $copy, $conditional, $wrap) {
                 switch (true) {
                     case 0 === $max:
                         return $copy + 1;
@@ -837,32 +768,32 @@ final class CompiledLength
         }
 
         switch (true) {
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return $this->literalLength($node->value, $caseless);
-            case $node instanceof DotNode:
-            case $node instanceof AnchorNode:
-            case $node instanceof AssertionNode:
-            case $node instanceof KeepNode:
+            case true === $node instanceof DotNode:
+            case true === $node instanceof AnchorNode:
+            case true === $node instanceof AssertionNode:
+            case true === $node instanceof KeepNode:
                 return 1;
-            case $node instanceof CommentNode:
+            case true === $node instanceof CommentNode:
                 return 0;
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 return $this->typeLength($node);
-            case $node instanceof UnicodePropNode:
+            case true === $node instanceof UnicodePropNode:
                 return $this->propertyLength($node);
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 return $this->classLength($node, $caseless);
-            case $node instanceof ExtendedCharClassNode:
+            case true === $node instanceof ExtendedCharClassNode:
                 return $this->extendedClassLength($node, $caseless)[0];
-            case $node instanceof BackrefNode:
+            case true === $node instanceof BackrefNode:
                 return $this->referenceLength($node, $caseless);
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 return 3 + 3 * \count($node->returnedGroups);
-            case $node instanceof CalloutNode:
+            case true === $node instanceof CalloutNode:
                 return \is_string($node->identifier) && $node->isStringIdentifier ? 9 + $node->getEndPosition() - $node->getStartPosition() - 4 : 6;
-            case $node instanceof PcreVerbNode:
+            case true === $node instanceof PcreVerbNode:
                 return $this->verbLength($node->verb);
-            case $node instanceof LimitMatchNode:
+            case true === $node instanceof LimitMatchNode:
                 return 0;
             default:
                 return null;
@@ -875,11 +806,11 @@ final class CompiledLength
     private function leafCeiling(NodeInterface $node): ?int
     {
         switch (true) {
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return null;
-            case $node instanceof BackrefNode:
+            case true === $node instanceof BackrefNode:
                 return 6;
-            case $node instanceof GroupNode && $this->isBlank($node->child):
+            case true === ($node instanceof GroupNode && $this->isBlank($node->child)):
                 return self::BRACKETS;
             default:
                 return null;
@@ -892,7 +823,7 @@ final class CompiledLength
      */
     private function repeatedLength(QuantifierNode $node, bool $caseless): ?int
     {
-        [$min, $max] = $this->boundsOf($node);
+        [$min, $max] = self::boundsOf($node);
         $item = $this->classOfSingleItem($node->node);
         if ($item instanceof SubroutineNode) {
             return self::repeatCall(3 + 3 * \count($item->returnedGroups), $min, $max, QuantifierType::Possessive() === $node->type, $this->target->supports(PcreFeature::PossessiveRepeatOnceIsAtomic()));
@@ -966,14 +897,11 @@ final class CompiledLength
      *
      * @return array{0: int, 1: ?int}
      */
-    private function boundsOf(QuantifierNode $node): array
+    private static function boundsOf(QuantifierNode $node): array
     {
-        if (!isset($this->bounds[$node->quantifier])) {
-            $bounds = QuantifierBounds::parse($node->quantifier);
-            $this->bounds[$node->quantifier] = null === $bounds ? [1, 1] : [$bounds->min, $bounds->max];
-        }
+        $bounds = $node->bounds;
 
-        return $this->bounds[$node->quantifier];
+        return null === $bounds ? [1, 1] : [$bounds->min, $bounds->max];
     }
 
     /**
@@ -1196,23 +1124,19 @@ final class CompiledLength
         foreach ($node->scannedGroups as $group) {
             // "+1" is the group opened next, "-1" the one opened last.
             $number = (int) $group;
-            switch ($group[0]) {
-                case '<':
-                case "'":
+            switch (true) {
+                case '<' === $group[0]:
+                case "'" === $group[0]:
                     $numbers = $this->groupIndex()->numbersNamed((string) substr($group, 1, -1));
-
                     break;
-                case '+':
+                case '+' === $group[0]:
                     $numbers = [$next - 1 + $number];
-
                     break;
-                case '-':
+                case '-' === $group[0]:
                     $numbers = [$next + $number];
-
                     break;
                 default:
                     $numbers = [$number];
-
                     break;
             }
 
@@ -1343,12 +1267,12 @@ final class CompiledLength
     private function codePointOf(NodeInterface $node): ?int
     {
         switch (true) {
-            case $node instanceof LiteralNode && $this->utf && 1 === mb_strlen($node->value, 'UTF-8'):
+            case true === ($node instanceof LiteralNode && $this->utf && 1 === mb_strlen($node->value, 'UTF-8')):
                 return (int) mb_ord($node->value, 'UTF-8');
-            case $node instanceof LiteralNode && !$this->utf && 1 === \strlen($node->value):
+            case true === ($node instanceof LiteralNode && !$this->utf && 1 === \strlen($node->value)):
                 return \ord($node->value);
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 return $node->codePoint;
             default:
                 return null;
@@ -1361,7 +1285,8 @@ final class CompiledLength
      */
     private function caseRulesVary(): bool
     {
-        return $this->caseRulesVary ??= false !== strpos($this->flags, 'r') || false !== strpos($this->source, 'TURKISH_CASING') || false !== strpos($this->source, 'CASELESS_RESTRICT') || 1 === LibraryPcre::match('/\(\?[\^a-zA-Z]*r/', $this->source);
+        return $this->caseRulesVary ??= false !== strpos($this->flags, 'r') || false !== strpos($this->source, 'TURKISH_CASING') || false !== strpos($this->source, 'CASELESS_RESTRICT')
+            || 1 === LibraryPcre::match('/\(\?[\^a-zA-Z]*r/', $this->source);
     }
 
     /**
@@ -1542,25 +1467,23 @@ final class CompiledLength
     private function namedConditionLength(NodeInterface $condition): ?int
     {
         switch (true) {
-            case $condition instanceof BackrefNode:
+            case true === $condition instanceof BackrefNode:
                 $numbers = array_map(fn (GroupNode $group): ?int => $this->groupIndex()->numberOf($group), $this->groupIndex()->groupsReferencedBy($condition));
-
                 break;
-            case $condition instanceof SubroutineNode && 0 === strncmp($condition->reference, 'R&', strlen('R&')):
+            case true === ($condition instanceof SubroutineNode && 0 === strncmp($condition->reference, 'R&', strlen('R&'))):
                 $numbers = $this->groupIndex()->numbersNamed((string) substr($condition->reference, 2));
-
                 break;
             default:
                 $numbers = [];
-
                 break;
         }
         $numbers = array_unique($numbers);
+        $matchSubject1500 = \count($numbers);
 
-        switch (\count($numbers)) {
-            case 0:
+        switch (true) {
+            case 0 === $matchSubject1500:
                 return null;
-            case 1:
+            case 1 === $matchSubject1500:
                 return 3;
             default:
                 return 5;
@@ -1746,10 +1669,10 @@ final class CompiledLength
         $start = $node->yes->getEndPosition();
         $between = trim((string) substr($this->source, $start, $node->getEndPosition() - 1 - $start), " \t\n\r\v\f");
 
-        switch ($between) {
-            case '|':
+        switch (true) {
+            case '|' === $between:
                 return true;
-            case '':
+            case '' === $between:
                 return false;
             default:
                 return null;

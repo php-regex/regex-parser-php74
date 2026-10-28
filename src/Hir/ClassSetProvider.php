@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace PHPRegex\Parser\Hir;
 
 use PHPRegex\Parser\Cache\StaticCaches;
+use PHPRegex\Parser\Engine\CharacterTables;
 use PHPRegex\Parser\Engine\LibraryPcre;
 use PHPRegex\Parser\Engine\NoJit;
 use PHPRegex\Parser\Exception\InternalFailureException;
@@ -127,29 +128,25 @@ final class ClassSetProvider
     private const NEGATED_TYPES = ['\\D', '\\S', '\\W', '\\H', '\\V'];
 
     /**
+     * Turns the start-up study off in a probe (see probe()).
+     */
+    private const NO_START_OPT = '(*NO_START_OPT)';
+
+    /**
      * The key the general categories are kept under between processes.
      */
     private const CATEGORIES_KEY = 'general categories';
 
-    /**
-     * @var string|null
-     */
-    private static $unicodeSubject;
+    private static ?string $unicodeSubject = null;
 
-    /**
-     * @var string|null
-     */
-    private static $byteSubject;
+    private static ?string $byteSubject = null;
 
     /**
      * @var array<string, CharSet|false>
      */
-    private static $sets = [];
+    private static array $sets = [];
 
-    /**
-     * @var \PHPRegex\Parser\RegexParser|null
-     */
-    private static $parser;
+    private static ?RegexParser $parser = null;
 
     /**
      * The leaf general categories read from one scan, false when the scan
@@ -161,17 +158,13 @@ final class ClassSetProvider
 
     /**
      * Whether a Unicode probe may run with the JIT.
-     *
-     * @var bool
      */
-    private static $jit = true;
+    private static bool $jit = true;
 
     /**
      * Where the engine's answers are kept between processes, if anywhere.
-     *
-     * @var \PHPRegex\Parser\Hir\ClassSetStore|null
      */
-    private static $store;
+    private static ?ClassSetStore $store = null;
 
     /**
      * Keep what the engine answers, its Unicode scans and its general
@@ -186,32 +179,68 @@ final class ClassSetProvider
     }
 
     /**
-     * Whether a bare script name, "\p{Han}", means the script alone for the
-     * target, as before PCRE2 10.40, while the running engine reads it as
-     * the script extensions: the atoms are then asked with "sc:" (see
-     * scriptsAlone()).
+     * The atom, or a whole pattern, with each property spelled so that the
+     * engine, the running one when null, reads it as the target does; null
+     * when one has no such spelling, and its set is unknown. Spelled again
+     * only where the two read names otherwise, one before PCRE2 10.40 and
+     * one from it; the atom as written for a null target. An engine older
+     * than the target, reading names alike, knows the names the release
+     * tables give it, and has none for those a later release added.
+     *
+     * A target before 10.40 reads one exact spelling, and a bare script
+     * name, "\p{Han}", as the script alone, which a later engine reads as
+     * "\p{sc:Han}". A target from 10.40 reads names loosely, "sc=", "script="
+     * and the four-letter script codes: an older engine reads the script as
+     * its bare name, and a category as 10.39 spells it, but has no name for
+     * a bare script name, which means the script extensions from 10.40, nor
+     * for "scx:", a Bidi class or a binary property. A backslash escaped by
+     * another is left alone; a property spelled again in an atom holding a
+     * "\Q" may be a quoted one, and the set is unknown.
      */
-    public static function readsScriptsAlone(?PcreTarget $target): bool
+    public static function spelledFor(string $atom, ?PcreTarget $target, ?PcreTarget $engine = null): ?string
     {
-        return null !== $target
-            && !$target->supports(PcreFeature::LoosePropertyNames())
-            && PcreTarget::runtime()->supports(PcreFeature::LoosePropertyNames());
-    }
+        if (null === $target || (false === strpos($atom, '\\p') && false === strpos($atom, '\\P'))) {
+            return $atom;
+        }
 
-    /**
-     * The atom with each "\p{Script}" and "\P{^Script}" a script table
-     * lookup, "\p{sc:Script}": what a script name meant before PCRE2 10.40.
-     * A backslash escaped by another is left alone.
-     */
-    public static function scriptsAlone(string $atom): string
-    {
-        return LibraryPcre::replaceCallback(
-            '/(?<!\\\\)((?:\\\\\\\\)*+\\\\[pP]\{)(\^?)([A-Za-z_]++)\}/',
-            static fn (array $match): string => PropertyNames::isScriptBefore1040($match[3])
-                    ? $match[1].$match[2].'sc:'.$match[3].'}'
-                    : $match[0],
+        $engine ??= PcreTarget::runtime();
+        $loose = $target->supports(PcreFeature::LoosePropertyNames());
+        $alike = $loose === $engine->supports(PcreFeature::LoosePropertyNames());
+        // No release dropped a name: an engine as new as the target knows
+        // every name it does.
+        if ($alike && version_compare($engine->pcreVersion, $target->pcreVersion, '>=')) {
+            return $atom;
+        }
+
+        $unread = false;
+        $spelled = LibraryPcre::replaceCallback(
+            '/(?<!\\\\)((?:\\\\\\\\)*+\\\\)([pP])(\{[^}]*+\}|.)/s',
+            static function (array $match) use ($loose, $alike, $target, $engine, &$unread): string {
+                $braced = 0 === strncmp($match[3], '{', strlen('{'));
+                $name = $braced ? (string) substr($match[3], 1, -1) : $match[3];
+                switch (true) {
+                    case true === $alike:
+                        $spelling = self::knownToBoth($name, $braced, $loose, $engine) ? $match[3] : null;
+                        break;
+                    case true === $loose:
+                        $spelling = self::nameBefore1040($name, $braced, $target, $engine);
+                        break;
+                    default:
+                        $spelling = self::nameFrom1040($name, $braced, $target);
+                        break;
+                }
+                if (null === $spelling) {
+                    $unread = true;
+
+                    return $match[0];
+                }
+
+                return $match[1].$match[2].$spelling;
+            },
             $atom,
-        ) ?? $atom;
+        );
+
+        return $unread || null === $spelled || ($spelled !== $atom && false !== strpos($atom, '\\Q')) ? null : $spelled;
     }
 
     /**
@@ -229,30 +258,46 @@ final class ClassSetProvider
      * being kept: the next query scans again. A refusal to compile the
      * probe, or an atom that leaves no delimiter free, is kept.
      *
-     * @param string $atom        one character's worth of pattern: a class, an escape, a dot
-     * @param string $modifiers   the options in force at the atom, as above
-     * @param string $startVerbs  the options the pattern opens with, such as "(*UCP)"
-     *                            or "(*CR)": they change what a class or a dot matches
-     * @param bool   $unicodeFlag whether the pattern's own /u flag is set: this PHP
-     *                            passes PCRE2_UCP with it, so the probe carries the flag
-     *                            only when the pattern does — a lone "(*UTF)" reads
-     *                            UTF-8 without the Unicode properties
+     * @param string  $atom        one character's worth of pattern: a class, an escape, a dot
+     * @param string  $modifiers   the options in force at the atom, as above
+     * @param string  $startVerbs  the options the pattern opens with, such as "(*UCP)"
+     *                             or "(*CR)": they change what a class or a dot matches
+     * @param bool    $unicodeFlag whether the pattern's own /u flag is set: this PHP
+     *                             passes PCRE2_UCP with it, so the probe carries the flag
+     *                             only when the pattern does — a lone "(*UTF)" reads
+     *                             UTF-8 without the Unicode properties
+     * @param ?string $locale      the LC_CTYPE locale the pattern runs under, whose
+     *                             character tables decide the types, the POSIX classes
+     *                             and the other case of a character below 256 without
+     *                             /u; the one PHP compiles under now when null
      */
-    public static function query(string $atom, bool $unicode, string $modifiers, string $startVerbs = '', bool $unicodeFlag = true): ?CharSet
+    public static function query(string $atom, bool $unicode, string $modifiers, string $startVerbs = '', bool $unicodeFlag = true, ?string $locale = null): ?CharSet
     {
         StaticCaches::register(self::class, \Closure::fromCallable([self::class, 'clear']));
 
         $atom = self::spelledOnce($atom);
         $modifiers = self::bearingOn($atom, $modifiers);
         $global = $unicodeFlag && $unicode ? 'u' : '';
-        $key = $startVerbs.$global.'|'.$modifiers.':'.$atom;
+        // Under /u the Unicode properties decide; otherwise the tables of
+        // the locale, read by a scan under it.
+        $tables = '' !== $global ? CharacterTables::BUILT_IN : $locale ?? CharacterTables::current();
+        $key = $startVerbs.$global.'|'.$modifiers.':'.$atom.(CharacterTables::BUILT_IN === $tables ? '' : '|'.$tables);
         if (!isset(self::$sets[$key])) {
             // A scan of the 256 bytes costs less than reading the atom: only
             // the Unicode scans, over every code point, are worth saving.
-            $set = ($unicode && $unicodeFlag ? self::caselessAscii($atom, $modifiers) : null)
-                ?? ($unicode ? self::derived($atom, $modifiers, $startVerbs, $unicodeFlag) : null)
-                ?? ($unicode ? self::composed($atom, $modifiers, $startVerbs, $unicodeFlag) : null)
-                ?? self::scanned($atom, $unicode, $modifiers, $global, $startVerbs, $key);
+            $set = null;
+            $read = static function () use (&$set, $atom, $unicode, $modifiers, $startVerbs, $unicodeFlag, $global, $key): void {
+                $set = ($unicode && $unicodeFlag ? self::caselessAscii($atom, $modifiers) : null)
+                    ?? ($unicode ? self::derived($atom, $modifiers, $startVerbs, $unicodeFlag) : null)
+                    ?? ($unicode ? self::composed($atom, $modifiers, $startVerbs, $unicodeFlag) : null)
+                    ?? self::scanned($atom, $unicode, $modifiers, $global, $startVerbs, $key);
+            };
+            if ('' !== $global) {
+                $read();
+            } else {
+                CharacterTables::under($tables, $read);
+            }
+
             if (null === $set) {
                 return null;
             }
@@ -264,6 +309,54 @@ final class ClassSetProvider
         $set = self::$sets[$key];
 
         return false === $set ? null : $set;
+    }
+
+    /**
+     * Whether an engine older than the target, which reads names by the same
+     * rules, knows the name: the release tables say, from 10.40, the names
+     * of 10.39 and the scripts each older release added, before.
+     */
+    private static function knownToBoth(string $name, bool $braced, bool $loose, PcreTarget $engine): bool
+    {
+        if (!$loose) {
+            $bare = $braced && 0 === strncmp($name, '^', strlen('^')) ? (string) substr($name, 1) : $name;
+
+            return PropertyNames::knownBefore1040($bare, $engine);
+        }
+
+        $release = PropertyNames::firstReleaseKnowing($name, $braced);
+
+        return null !== $release && $engine->pcreAtLeast($release);
+    }
+
+    /**
+     * What follows "\p", for an engine before 10.40, of a name a target from
+     * 10.40 reads; a category of one letter as written.
+     */
+    private static function nameBefore1040(string $name, bool $braced, PcreTarget $target, PcreTarget $engine): ?string
+    {
+        if (!$braced && Ascii::isAlpha($name) && Ascii::upper($name) === $name) {
+            return $name;
+        }
+
+        $read = PropertyNames::readBefore1040($name, $braced, $target, $engine);
+
+        return null === $read ? null : '{'.($read[0] ? '^' : '').$read[1].'}';
+    }
+
+    /**
+     * What follows "\p", for an engine from 10.40, of a name a target before
+     * 10.40 reads: a script with "sc:", a category as written.
+     */
+    private static function nameFrom1040(string $name, bool $braced, PcreTarget $target): ?string
+    {
+        $caret = $braced && 0 === strncmp($name, '^', strlen('^'));
+        $bare = $caret ? (string) substr($name, 1) : $name;
+        if (!PropertyNames::knownBefore1040($bare, $target)) {
+            return null;
+        }
+
+        return !$braced ? $name : '{'.($caret ? '^' : '').(PropertyNames::isScriptBefore1040($bare) ? 'sc:' : '').$bare.'}';
     }
 
     /**
@@ -433,8 +526,9 @@ final class ClassSetProvider
      */
     private static function partition(array $names)
     {
-        // Captures, no backreference: the JIT may run it (see probe()).
-        $pattern = '/'.(self::$jit ? '' : NoJit::VERB).'(?:('.implode(')|(', array_map(static fn (string $name): string => '\\p{'.$name.'}++', $names)).'))/u';
+        // Captures, no backreference: the JIT may run it (see probe()), and
+        // no start-up study.
+        $pattern = '/'.(self::$jit ? '' : NoJit::VERB).self::NO_START_OPT.'(?:('.implode(')|(', array_map(static fn (string $name): string => '\\p{'.$name.'}++', $names)).'))/u';
         $subject = self::unicodeSubject();
         $ranges = array_fill_keys($names, []);
         foreach (self::blocks(true, \strlen($subject)) as [$blockStart, $blockLength]) {
@@ -519,7 +613,7 @@ final class ClassSetProvider
         // refuses is scanned, and refused there.
         $prefix = $delimiter.$startVerbs.('' === $modifiers ? '' : '(?'.$modifiers.')');
         $regex = $prefix.$atom.$delimiter.($unicodeFlag ? 'u' : '');
-        $parser = self::$parser = self::$parser ?? RegexParser::create();
+        $parser = self::$parser ??= RegexParser::create();
 
         // The library's own regexes giving up under the caller's limits
         // leave the class unread, as the engine giving up on a member does.
@@ -639,7 +733,7 @@ final class ClassSetProvider
             // folded as an atom of its own.
             if (null !== $atom && null !== $from && null !== $to && $unicodeFlag && $to <= 0x7F && $from <= $to) {
                 $set = CharSet::empty();
-                for ($codePoint = $from; $codePoint <= $to; $codePoint++) {
+                for ($codePoint = $from; $codePoint <= $to; ++$codePoint) {
                     $folded = self::query(\sprintf('\\x{%X}', $codePoint), true, $modifiers, $startVerbs, $unicodeFlag);
                     if (null === $folded) {
                         return null;
@@ -703,7 +797,7 @@ final class ClassSetProvider
      * the store when a former process kept it, and kept there once made. A
      * byte scan, over 256 bytes, costs less than reading a file.
      *
-     * @return \PHPRegex\Parser\Hir\CharSet|false|null
+     * @return CharSet|false|null
      */
     private static function scanned(string $atom, bool $unicode, string $modifiers, string $global, string $startVerbs, string $key)
     {
@@ -725,7 +819,7 @@ final class ClassSetProvider
      * The set, false when the probe cannot be written or PCRE refuses it,
      * null when the engine gave up under its limits.
      *
-     * @return \PHPRegex\Parser\Hir\CharSet|false|null
+     * @return CharSet|false|null
      */
     private static function scan(string $atom, bool $unicode, string $modifiers, string $global, string $startVerbs)
     {
@@ -776,7 +870,14 @@ final class ClassSetProvider
      * pairs, and every known one needs a capture and a backreference, which
      * a probe without a parenthesis cannot hold. A byte probe runs without
      * it: compiling it costs more than reading 256 bytes. No delimiter here
-     * is one the verb holds.
+     * is one the verbs hold.
+     *
+     * The probe reads which characters the atom holds, not where a search
+     * would find one: "(*NO_START_OPT)" turns off the start-up study, whose
+     * set of first code units can leave members out. Under a Latin-1 locale
+     * "(*UTF)" without u, PCRE2 10.49 reads "é" as a word character, yet
+     * '/(*UTF)\w/' does not find it in "é": the study leaves out its lead
+     * byte.
      *
      * @return non-empty-string
      */
@@ -784,7 +885,7 @@ final class ClassSetProvider
     {
         $jit = self::$jit && $unicode && false === strpos($atom, '(');
 
-        return $delimiter.($jit ? '' : NoJit::VERB).$startVerbs.'(?'.$modifiers.':'.$atom.')++'.$delimiter.$global;
+        return $delimiter.($jit ? '' : NoJit::VERB).self::NO_START_OPT.$startVerbs.'(?'.$modifiers.':'.$atom.')++'.$delimiter.$global;
     }
 
     /**
@@ -901,13 +1002,13 @@ final class ClassSetProvider
     private static function offsetOf(int $codePoint): int
     {
         switch (true) {
-            case $codePoint < 0x80:
+            case true === $codePoint < 0x80:
                 return $codePoint;
-            case $codePoint < 0x800:
+            case true === $codePoint < 0x800:
                 return self::TWO_BYTES_AT + ($codePoint - 0x80) * 2;
-            case $codePoint < 0xD800:
+            case true === $codePoint < 0xD800:
                 return self::THREE_BYTES_AT + ($codePoint - 0x800) * 3;
-            case $codePoint < 0x10000:
+            case true === $codePoint < 0x10000:
                 return self::AFTER_SURROGATES_AT + ($codePoint - 0xE000) * 3;
             default:
                 return self::FOUR_BYTES_AT + ($codePoint - 0x10000) * 4;
@@ -917,13 +1018,13 @@ final class ClassSetProvider
     private static function codePointAt(int $offset): int
     {
         switch (true) {
-            case $offset < self::TWO_BYTES_AT:
+            case true === $offset < self::TWO_BYTES_AT:
                 return $offset;
-            case $offset < self::THREE_BYTES_AT:
+            case true === $offset < self::THREE_BYTES_AT:
                 return 0x80 + intdiv($offset - self::TWO_BYTES_AT, 2);
-            case $offset < self::AFTER_SURROGATES_AT:
+            case true === $offset < self::AFTER_SURROGATES_AT:
                 return 0x800 + intdiv($offset - self::THREE_BYTES_AT, 3);
-            case $offset < self::FOUR_BYTES_AT:
+            case true === $offset < self::FOUR_BYTES_AT:
                 return 0xE000 + intdiv($offset - self::AFTER_SURROGATES_AT, 3);
             default:
                 return 0x10000 + intdiv($offset - self::FOUR_BYTES_AT, 4);
@@ -932,7 +1033,7 @@ final class ClassSetProvider
 
     private static function byteSubject(): string
     {
-        return self::$byteSubject = self::$byteSubject ?? implode('', array_map(\Closure::fromCallable('chr'), range(0, 0xFF)));
+        return self::$byteSubject ??= implode('', array_map(\Closure::fromCallable('chr'), range(0, 0xFF)));
     }
 
     /**

@@ -26,7 +26,6 @@ use PHPRegex\Parser\Node\GroupType;
 use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\ScriptRunNode;
 use PHPRegex\Parser\Node\SequenceNode;
@@ -70,73 +69,12 @@ use PHPRegex\Parser\Syntax\PcreNumber;
 final class LookbehindLength
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\GroupIndex
-     */
-    private $groups;
-
-    /**
-     * @var bool
-     *
-     */
-    private $unicode;
-
-    /**
-     * @var bool
-     *
-     */
-    private $variableLength;
-
-    /**
-     * @var \Closure(GroupNode, array<int, true>):void|null
-     *
-     */
-    private $onLookaround;
-
-    /**
-     * @var \Closure(NodeInterface):void|null
-     *
-     */
-    private $onGroupBody;
-
-    /**
-     * @var \Closure(SubroutineNode|BackrefNode, list<GroupNode>):void|null
-     *
-     */
-    private $onReference;
-
-    /**
-     * @var bool
-     *
-     */
-    private $inLookaheads = true;
-
-    /**
-     * @var bool
-     *
-     */
-    private $skipsDefine = true;
-
-    /**
-     * @var bool
-     *
-     */
-    private $readsNesting = true;
-
-    /**
-     * @var bool
-     *
-     */
-    private $wrapsLengths = false;
-
-    /**
      * The length of each group measured, by node, with the groups its
      * measure called.
      *
      * @var array<int, array{length: LengthRange, calls: array<int, true>, unfixed: bool, tooLong: int|null}>
      */
-    private $measuredGroups = [];
-
+    private array $measuredGroups = [];
     /**
      * The lookbehinds measured and found sound, by node, with the groups
      * their measure called: one inside another is measured with it, and not
@@ -144,49 +82,104 @@ final class LookbehindLength
      *
      * @var array<int, array<int, true>>
      */
-    private $measuredLookbehinds = [];
-
+    private array $measuredLookbehinds = [];
     /**
      * The groups the measure in progress called, by node: whether one of
      * them is being measured is all that decides what the measure finds.
      *
      * @var array<int, true>
      */
-    private $called = [];
-
+    private array $called = [];
     /**
      * How many times a measure called a group being measured already. A
      * measure during which this moved is not kept: what it found depends on
      * the groups being measured around it.
-     *
-     * @var int
      */
-    private $recursions = 0;
-
+    private int $recursions = 0;
     /**
      * Whether the measure in progress met an item of no fixed length where
      * the PCRE2 judged (up to 10.42) ends the measure there.
-     *
-     * @var bool
      */
-    private $unfixed = false;
-
+    private bool $unfixed = false;
     /**
      * The length the branch reached when it passed PcreNumber::MAX, the
      * longest branch PCRE2 measures (LOOKBEHIND_MAX), which ends the measure
      * there; null while it has not.
-     *
-     * @var int|null
      */
-    private $tooLong;
-
+    private ?int $tooLong = null;
     /**
      * The longest branch measured to its end, of a lookbehind or of a group
      * one holds or calls.
-     *
-     * @var int
      */
-    private $longestBranch = 0;
+    private int $longestBranch = 0;
+    /**
+     */
+    private GroupIndex $groups;
+    /**
+     */
+    private bool $unicode;
+    /**
+     */
+    private bool $variableLength;
+    /**
+     * @var list<GroupType>|null
+     */
+    private static ?array $LOOKAROUNDS = null;
+
+    /**
+     * @return list<GroupType>
+     */
+    private static function LOOKAROUNDS(): array
+    {
+        return self::$LOOKAROUNDS ??= [
+            GroupType::LookaheadPositive(),
+            GroupType::LookaheadNegative(),
+            GroupType::LookbehindPositive(),
+            GroupType::LookbehindNegative(),
+        ];
+    }
+    /**
+     * @var list<GroupType>|null
+     */
+    private static ?array $LOOKAHEADS = null;
+
+    /**
+     * @return list<GroupType>
+     */
+    private static function LOOKAHEADS(): array
+    {
+        return self::$LOOKAHEADS ??= [
+            GroupType::LookaheadPositive(),
+            GroupType::LookaheadNegative(),
+        ];
+    }
+    /**
+     * @var \Closure(GroupNode, array<int, true>):void|null
+     *
+     */
+    private ?\Closure $onLookaround = null;
+    /**
+     * @var \Closure(NodeInterface):void|null
+     *
+     */
+    private ?\Closure $onGroupBody = null;
+    /**
+     * @var \Closure(SubroutineNode|BackrefNode, list<GroupNode>):void|null
+     *
+     */
+    private ?\Closure $onReference = null;
+    /**
+     */
+    private bool $inLookaheads = true;
+    /**
+     */
+    private bool $skipsDefine = true;
+    /**
+     */
+    private bool $readsNesting = true;
+    /**
+     */
+    private bool $wrapsLengths = false;
 
     /**
      * @param bool                                                               $unicode        whether lengths count characters
@@ -313,34 +306,6 @@ final class LookbehindLength
         return $length;
     }
 
-    private static function LOOKAROUNDS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                GroupType::LookaheadPositive(),
-                GroupType::LookaheadNegative(),
-                GroupType::LookbehindPositive(),
-                GroupType::LookbehindNegative(),
-            ];
-        }
-
-        return $cache;
-    }
-
-    private static function LOOKAHEADS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                GroupType::LookaheadPositive(),
-                GroupType::LookaheadNegative(),
-            ];
-        }
-
-        return $cache;
-    }
-
     /**
      * The length of a branch, of a group or a lookbehind: one past the limit
      * is refused, and before PCRE2 10.34 one that wrapped below zero has no
@@ -457,17 +422,14 @@ final class LookbehindLength
             }
 
             switch (true) {
-                case $node instanceof AlternationNode:
+                case true === $node instanceof AlternationNode:
                     $alternatives = $node->alternatives;
-
                     break;
-                case self::hasNoBranch($node):
+                case true === self::hasNoBranch($node):
                     $alternatives = [$node->yes, $node->no];
-
                     break;
                 default:
                     $alternatives = [$node->yes];
-
                     break;
             }
             [$min, $max] = [\PHP_INT_MAX, 0];
@@ -514,7 +476,7 @@ final class LookbehindLength
 
         if ($node instanceof QuantifierNode) {
             [$childMin, $childMax] = $this->of($node->node, $expanding);
-            [$qMin, $qMax] = self::bounds($node->quantifier);
+            [$qMin, $qMax] = self::bounds($node);
 
             // The item is added to its branch before the repeat is read: a
             // repeat of variable count, or of none, comes too late.
@@ -575,8 +537,8 @@ final class LookbehindLength
     }
 
     /**
-     * @param \PHPRegex\Parser\Node\SubroutineNode|\PHPRegex\Parser\Node\BackrefNode $node
-     * @param array<int, true>                                                       $expanding
+     * @param array<int, true>           $expanding
+     * @param SubroutineNode|BackrefNode $node
      *
      * @return LengthRange
      */
@@ -599,7 +561,7 @@ final class LookbehindLength
         // already: PCRE finds no bound.
         $inside = $node->getStartPosition() >= $group->getStartPosition() && $node->getStartPosition() < $group->getEndPosition();
         if ($inside || isset($expanding[$id])) {
-            $this->recursions++;
+            ++$this->recursions;
 
             return [0, null];
         }
@@ -672,7 +634,7 @@ final class LookbehindLength
 
         $count = null;
         if ($first instanceof QuantifierNode) {
-            [$qMin, $qMax] = self::bounds($first->quantifier);
+            [$qMin, $qMax] = self::bounds($first);
             $count = $qMin === $qMax ? $qMin : null;
         }
         $item = $first instanceof QuantifierNode ? $first->node : $first;
@@ -811,7 +773,7 @@ final class LookbehindLength
      */
     private static function endsBranch(NodeInterface $node): bool
     {
-        return $node instanceof PcreVerbNode && \in_array(explode(':', $node->verb, 2)[0], ['ACCEPT', 'FAIL', 'F'], true);
+        return $node instanceof PcreVerbNode && \in_array($node->name, ['ACCEPT', 'FAIL'], true);
     }
 
     private function groupBody(NodeInterface $body): void
@@ -822,14 +784,14 @@ final class LookbehindLength
     }
 
     /**
-     * The repeat counts, -1 for no upper bound. QuantifierBounds reads the
-     * spaces inside the braces PCRE2 10.43 allows.
+     * The repeat counts, -1 for no upper bound. The bounds read the spaces
+     * inside the braces PCRE2 10.43 allows.
      *
      * @return array{0: int, 1: int}
      */
-    private static function bounds(string $quantifier): array
+    private static function bounds(QuantifierNode $node): array
     {
-        $bounds = QuantifierBounds::parse($quantifier);
+        $bounds = $node->bounds;
 
         return null === $bounds ? [1, 1] : [$bounds->min, $bounds->max ?? -1];
     }

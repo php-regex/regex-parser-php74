@@ -24,16 +24,11 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class ControlCharNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $char;
-
+    public string $char;
     /**
-     *
-     * @var int
      */
-    public $codePoint;
+    public int $codePoint;
 
     public function __construct(
         string $char,

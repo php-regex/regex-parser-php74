@@ -42,22 +42,14 @@ use PHPRegex\Parser\Token\TokenType;
 final class FirstErrorLocator
 {
     /**
-     *
-     * @var int
      */
-    private $maxRecursionDepth;
-
+    private int $maxRecursionDepth;
     /**
-     *
-     * @var int
      */
-    private $maxLookbehindLength;
-
+    private int $maxLookbehindLength;
     /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
      */
-    private $target;
+    private PcreTarget $target;
 
     public function __construct(int $maxRecursionDepth, int $maxLookbehindLength, PcreTarget $target)
     {
@@ -84,7 +76,7 @@ final class FirstErrorLocator
      * read: PCRE looks for the closing character to the end of the pattern,
      * so nothing after it is judged, and it is judged last.
      *
-     * @param \PHPRegex\Parser\Exception\LexerException|\PHPRegex\Parser\Exception\ParserException $error
+     * @param LexerException|ParserException $error
      */
     public function earlierError(string $regex, $error): ?RegexException
     {
@@ -331,7 +323,7 @@ final class FirstErrorLocator
         // it, at the start of its body, though the groups are never closed.
         $tooDeep = self::openerPastTheNestingLimit($tokens);
         if (null !== $tooDeep) {
-            return new SemanticErrorException(\sprintf('Parentheses are nested too deeply: PCRE allows at most %d levels.', Validator::MAX_GROUP_NESTING), ErrorCode::GroupNestedTooDeep(), $tooDeep->end(), $pattern, null, 'Flatten the pattern: drop groups that only wrap one item.');
+            return new SemanticErrorException(\sprintf('Parentheses are nested too deeply: PCRE allows at most %d levels.', Validator::MAX_GROUP_NESTING), ErrorCode::GroupNestedTooDeep(), $tooDeep->end(), $pattern, null, null, 'Flatten the pattern: drop groups that only wrap one item.');
         }
 
         $length = \strlen($pattern);
@@ -385,35 +377,31 @@ final class FirstErrorLocator
         }
 
         foreach ($tokens as $token) {
-            switch ($token->type) {
-                case TokenType::Literal():
-                case TokenType::GroupOpen():
-                case TokenType::GroupClose():
-                case TokenType::Alternation():
-                case TokenType::Dot():
-                case TokenType::Anchor():
-                case TokenType::CharClassOpen():
-                case TokenType::CharClassClose():
-                case TokenType::Range():
-                case TokenType::Negation():
-                case TokenType::PosixClass():
-                case TokenType::QuoteModeStart():
-                case TokenType::QuoteModeEnd():
-                case TokenType::CommentOpen():
+            switch (true) {
+                case $token->type === TokenType::Literal():
+                case $token->type === TokenType::GroupOpen():
+                case $token->type === TokenType::GroupClose():
+                case $token->type === TokenType::Alternation():
+                case $token->type === TokenType::Dot():
+                case $token->type === TokenType::Anchor():
+                case $token->type === TokenType::CharClassOpen():
+                case $token->type === TokenType::CharClassClose():
+                case $token->type === TokenType::Range():
+                case $token->type === TokenType::Negation():
+                case $token->type === TokenType::PosixClass():
+                case $token->type === TokenType::QuoteModeStart():
+                case $token->type === TokenType::QuoteModeEnd():
+                case $token->type === TokenType::CommentOpen():
                     $plain = true;
-
                     break;
-                case TokenType::Quantifier():
+                case $token->type === TokenType::Quantifier():
                     $plain = '{' !== $token->value[0];
-
                     break;
-                case TokenType::PcreVerb():
+                case $token->type === TokenType::PcreVerb():
                     $plain = self::opensGroup($token) && null !== PcreVerb::read($token->value)->assertion;
-
                     break;
                 default:
                     $plain = false;
-
                     break;
             }
 
@@ -455,12 +443,12 @@ final class FirstErrorLocator
      */
     private static function opensGroup(Token $token): bool
     {
-        switch ($token->type) {
-            case TokenType::GroupOpen():
-            case TokenType::GroupModifierOpen():
-            case TokenType::CommentOpen():
+        switch (true) {
+            case $token->type === TokenType::GroupOpen():
+            case $token->type === TokenType::GroupModifierOpen():
+            case $token->type === TokenType::CommentOpen():
                 return true;
-            case TokenType::PcreVerb():
+            case $token->type === TokenType::PcreVerb():
                 return $token->end() - $token->position === \strlen($token->value) + 2;
             default:
                 return false;
@@ -692,7 +680,7 @@ final class FirstErrorLocator
         // end again for each one.
         $closes = [];
         $next = null;
-        for ($at = \count($tokens) - 1; $at >= 0; $at--) {
+        for ($at = \count($tokens) - 1; $at >= 0; --$at) {
             $next = TokenType::GroupClose() === $tokens[$at]->type ? $at : $next;
             $closes[$at] = $next;
         }

@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Node;
 
 /**
- * Cached-instance twin of the QuantifierType enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The QuantifierType enum as a class of shared instances: QuantifierType::Greedy() returns
+ * the same instance at each call.
  */
-final class QuantifierType
+final class QuantifierType implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,29 +25,17 @@ final class QuantifierType
 
     public static function Greedy(): self
     {
-        if (!isset(self::$instances['Greedy'])) {
-            self::$instances['Greedy'] = new self('Greedy', 'greedy');
-        }
-
-        return self::$instances['Greedy'];
+        return self::$instances['Greedy'] ??= new self('Greedy', 'greedy');
     }
 
     public static function Lazy(): self
     {
-        if (!isset(self::$instances['Lazy'])) {
-            self::$instances['Lazy'] = new self('Lazy', 'lazy');
-        }
-
-        return self::$instances['Lazy'];
+        return self::$instances['Lazy'] ??= new self('Lazy', 'lazy');
     }
 
     public static function Possessive(): self
     {
-        if (!isset(self::$instances['Possessive'])) {
-            self::$instances['Possessive'] = new self('Possessive', 'possessive');
-        }
-
-        return self::$instances['Possessive'];
+        return self::$instances['Possessive'] ??= new self('Possessive', 'possessive');
     }
 
     /**
@@ -82,13 +52,12 @@ final class QuantifierType
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Node\\QuantifierType');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for QuantifierType.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

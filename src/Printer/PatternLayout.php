@@ -58,6 +58,28 @@ use PHPRegex\Parser\Text\Bytes;
  */
 final class PatternLayout
 {
+    private int $indentLevel;
+    /**
+     * Whether the sequence about to be visited is the body of a construct
+     * that already broke: it breaks too, rather than trying one line again.
+     */
+    private bool $parentBroke;
+    /**
+     * A comment already written as the trailing comment of the line before,
+     * which its own place in the tree must not write again.
+     */
+    private ?NodeInterface $skipNode = null;
+    /**
+     * Whether what was rendered so far wrote a "#" comment, which ends its
+     * line.
+     */
+    private bool $sawLineComment = false;
+    /**
+     */
+    private PatternPrinter $printer;
+    /**
+     */
+    private int $width;
     /**
      * What a piece of a run of atoms is to the layout: a character of a
      * word, white space, any other unit, a start or an end anchor, a
@@ -96,68 +118,20 @@ final class PatternLayout
     private const MAX_DEPTH = 2;
 
     /**
-     *
-     * @var \PHPRegex\Parser\Printer\PatternPrinter
      */
-    private $printer;
+    private bool $countsCodePoints;
 
     /**
-     * @var int
-     *
      */
-    private $width;
-
-    /**
-     * @var bool
-     *
-     */
-    private $countsCodePoints;
-
-    /**
-     * @var string|null
-     *
-     */
-    private $source;
+    private ?string $source;
 
     /**
      * @var non-empty-string
      *
      */
-    private $trail;
+    private string $trail;
 
-    /**
-     * @var bool
-     */
-    private $active;
-
-    /**
-     * @var int
-     */
-    private $indentLevel;
-
-    /**
-     * Whether the sequence about to be visited is the body of a construct
-     * that already broke: it breaks too, rather than trying one line again.
-     *
-     * @var bool
-     */
-    private $parentBroke;
-
-    /**
-     * A comment already written as the trailing comment of the line before,
-     * which its own place in the tree must not write again.
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface|null
-     */
-    private $skipNode;
-
-    /**
-     * Whether what was rendered so far wrote a "#" comment, which ends its
-     * line.
-     *
-     * @var bool
-     */
-    private $sawLineComment = false;
+    private bool $active;
 
     /**
      * @param int              $width            the width a line aims at, indent included
@@ -245,7 +219,7 @@ final class PatternLayout
     {
         $lines = explode("\n", $text);
         $count = \count($lines);
-        for ($i = 0; $i < $count; $i++) {
+        for ($i = 0; $i < $count; ++$i) {
             if (false === strpos($lines[$i], $trail)) {
                 if (self::endsInEscapedSpace($lines[$i])) {
                     $lines[$i] = substr($lines[$i], 0, -2).'\\x20';
@@ -255,11 +229,11 @@ final class PatternLayout
             }
 
             $column = 0;
-            for ($j = $i; $j < $count && false !== strpos($lines[$j], $trail); $j++) {
+            for ($j = $i; $j < $count && false !== strpos($lines[$j], $trail); ++$j) {
                 $column = max($column, self::columnsOf(explode($trail, $lines[$j], 2)[0], $countsCodePoints));
             }
 
-            for ($k = $i; $k < $j; $k++) {
+            for ($k = $i; $k < $j; ++$k) {
                 [$code, $comment] = explode($trail, $lines[$k], 2) + [1 => ''];
                 $lines[$k] = $code.str_repeat(' ', $column - self::columnsOf($code, $countsCodePoints) + 2).$comment;
             }
@@ -343,7 +317,7 @@ final class PatternLayout
         $bar = str_repeat(' ', max(0, $this->indentLevel * \strlen(self::INDENT) - 2)).'|';
         $result = $alternatives[0]->accept($this->printer);
 
-        for ($i = 1, $count = \count($alternatives); $i < $count; $i++) {
+        for ($i = 1, $count = \count($alternatives); $i < $count; ++$i) {
             // Once x is off, the rest of the group stays on its line.
             if (false === strpos($this->printer->flags(), 'x')) {
                 $result .= '|'.$alternatives[$i]->accept($this->printer);
@@ -418,7 +392,7 @@ final class PatternLayout
             $gap = null === $previous ? '' : $this->gap($previous, $child);
             $blank = null !== $previous && substr_count($gap, "\n") + ($previous instanceof CommentNode && 0 === substr_compare($previous->comment, "\n", -strlen("\n")) ? 1 : 0) >= 2;
 
-            if ($child instanceof CommentNode && $child->extended) {
+            if ($child instanceof CommentNode && $child->isExtended) {
                 $text = $child->accept($this->printer);
                 $trailing = null !== $previous && !$previous instanceof CommentNode && false === strpos($gap, "\n");
                 if ('' !== $current) {
@@ -513,11 +487,11 @@ final class PatternLayout
             $trailing = $this->trail.rtrim($lead->comment, "\n");
         }
 
-        $this->indentLevel++;
+        ++$this->indentLevel;
         $this->parentBroke = true;
         $child = $node->child->accept($this->printer);
         $this->parentBroke = false;
-        $this->indentLevel--;
+        --$this->indentLevel;
         $this->skipNode = null;
         $closing = false !== strpos($this->printer->flags(), 'x') ? "\n".self::indent($level).')' : ')';
         $this->printer->setFlags($outer);
@@ -548,12 +522,12 @@ final class PatternLayout
         $this->active = true;
 
         $level = $this->indentLevel;
-        $this->indentLevel++;
+        ++$this->indentLevel;
         $yes = $node->yes->accept($this->printer);
         $yesKeepsX = false !== strpos($this->printer->flags(), 'x');
         $hasNo = !($node->no instanceof LiteralNode && '' === $node->no->value);
         $no = $yesKeepsX ? $node->no->accept($this->printer) : $this->forceInline($node->no);
-        $this->indentLevel--;
+        --$this->indentLevel;
         $closesOnItsLine = false !== strpos($this->printer->flags(), 'x');
         $this->printer->setFlags($flags);
 
@@ -584,11 +558,11 @@ final class PatternLayout
         }
 
         $level = $this->indentLevel;
-        $this->indentLevel++;
+        ++$this->indentLevel;
         $this->parentBroke = true;
         $content = $node->content->accept($this->printer);
         $this->parentBroke = false;
-        $this->indentLevel--;
+        --$this->indentLevel;
 
         // Once x is off, a line break would be a literal.
         $closing = false !== strpos($this->printer->flags(), 'x') ? "\n".self::indent($level).')' : ')';
@@ -683,12 +657,12 @@ final class PatternLayout
         }
 
         switch (true) {
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 return \in_array($node->value, ['s', 'h', 'v', 'R'], true);
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return !$node->isRaw && self::isWhiteSpaceCharacter($node->value);
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 return $node->codePoint < 0x80 && self::isWhiteSpaceCharacter(\chr($node->codePoint));
             default:
                 return false;
@@ -703,7 +677,7 @@ final class PatternLayout
     private static function joinPieces(array $pieces, int $from, int $to): string
     {
         $text = $pieces[$from][0];
-        for ($i = $from + 1; $i <= $to; $i++) {
+        for ($i = $from + 1; $i <= $to; ++$i) {
             $text .= $pieces[$i][2].$pieces[$i][0];
         }
 
@@ -810,7 +784,7 @@ final class PatternLayout
 
         try {
             $text = $items[0]->accept($this->printer);
-            for ($i = 1, $count = \count($items); $i < $count; $i++) {
+            for ($i = 1, $count = \count($items); $i < $count; ++$i) {
                 $next = $items[$i]->accept($this->printer);
                 $text .= $this->printer->separator($text, $items[$i - 1], $items[$i], $next).$next;
             }
@@ -939,7 +913,7 @@ final class PatternLayout
         $first = 0;
         $last = \count($pieces) - 1;
         while ($first <= $last && self::PIECE_OPTION === $pieces[$first][1]) {
-            $first++;
+            ++$first;
         }
 
         if ($first > 0) {
@@ -952,18 +926,18 @@ final class PatternLayout
 
         if ($first < $last && self::PIECE_START === $pieces[$first][1]) {
             $lines[] = $pieces[$first][0];
-            $first++;
+            ++$first;
         }
 
         $end = null;
         if ($first < $last && self::PIECE_END === $pieces[$last][1]) {
             $end = $pieces[$last][0];
-            $last--;
+            --$last;
         }
 
         // White space in a row is one separator: the field ends after it.
         $from = $first;
-        for ($i = $first; $i <= $last; $i++) {
+        for ($i = $first; $i <= $last; ++$i) {
             if (self::PIECE_SPACE === $pieces[$i][1] && ($i === $last || self::PIECE_SPACE !== $pieces[$i + 1][1])) {
                 array_push($lines, ...$this->fieldLines($pieces, $from, $i));
                 $from = $i + 1;
@@ -1008,7 +982,7 @@ final class PatternLayout
         $units = [];
         $separators = [];
         $inWord = false;
-        for ($i = $from; $i <= $to; $i++) {
+        for ($i = $from; $i <= $to; ++$i) {
             [$piece, $kind, $separator, $glued] = $pieces[$i];
             $last = \count($units) - 1;
             if ($last >= 0 && ($glued || self::PIECE_SPACE === $kind || ($inWord && self::PIECE_WORD === $kind))) {
@@ -1096,7 +1070,7 @@ final class PatternLayout
     {
         $children = $node->children;
         $last = $children[\count($children) - 1] ?? null;
-        if (!$last instanceof CommentNode || !$last->extended || \count($children) < 2 || $last === $this->skipNode) {
+        if (!$last instanceof CommentNode || !$last->isExtended || \count($children) < 2 || $last === $this->skipNode) {
             return null;
         }
 
@@ -1168,7 +1142,7 @@ final class PatternLayout
             $first = $children[0] ?? null;
         }
 
-        if (!$first instanceof CommentNode || !$first->extended || $first === $node || null === $this->source) {
+        if (!$first instanceof CommentNode || !$first->isExtended || $first === $node || null === $this->source) {
             return null;
         }
 

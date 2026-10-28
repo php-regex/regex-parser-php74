@@ -21,29 +21,24 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class CommentNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $comment;
+    public string $comment;
+    /**
+     */
+    public bool $isExtended = false;
 
     /**
-     * @var bool
-     *
-     */
-    public $extended = false;
-
-    /**
-     * @param bool $extended whether the comment was written as a "# ..." line
-     *                       under /x rather than as a "(?#...)" group
+     * @param bool $isExtended whether the comment was written as a "# ..." line
+     *                         under /x rather than as a "(?#...)" group
      */
     public function __construct(
         string $comment,
         int $startPosition,
         int $endPosition,
-        bool $extended = false
+        bool $isExtended = false
     ) {
         $this->comment = $comment;
-        $this->extended = $extended;
+        $this->isExtended = $isExtended;
         parent::__construct($startPosition, $endPosition);
     }
 

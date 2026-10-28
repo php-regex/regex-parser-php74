@@ -21,28 +21,21 @@ use PHPRegex\Parser\PcreTarget;
 final class RangeVerdict
 {
     /**
-     * @var TargetVerdict
-     *
      */
-    public $from;
-
+    public TargetVerdict $from;
     /**
      * @var list<TargetVerdict>
      *
      */
-    public $later;
-
+    public array $later;
     /**
-     * @var PcreTarget|null
-     *
      */
-    public $readsOtherwise;
-
+    public ?PcreTarget $readsOtherwise;
     /**
      * @var array<string, string>
      *
      */
-    public $judgedWith;
+    public array $judgedWith;
 
     /**
      * @internal built by RangeDiff::diff()

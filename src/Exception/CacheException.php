@@ -16,4 +16,6 @@ namespace PHPRegex\Parser\Exception;
 /**
  * A cache could not store or read a tree: the parse itself is not at fault.
  */
-final class CacheException extends \RuntimeException implements ExceptionInterface {}
+final class CacheException extends \RuntimeException implements ExceptionInterface
+{
+}

@@ -26,24 +26,21 @@ final class LiteralSet
 {
     private const MAX_SET_SIZE = 100; // Prevent memory explosion
     private const MAX_STRING_LENGTH = 1000; // Prevent extremely long literals
+    /**
+     * @var array<string>
+     *
+     */
+    public array $prefixes;
 
     /**
      * @var array<string>
      *
      */
-    public $prefixes;
+    public array $suffixes;
 
     /**
-     * @var array<string>
-     *
      */
-    public $suffixes;
-
-    /**
-     *
-     * @var bool
-     */
-    public $complete;
+    public bool $complete;
 
     /**
      * @internal the literal extractor builds the sets

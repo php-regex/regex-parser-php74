@@ -30,24 +30,22 @@ use PHPRegex\Parser\PcreTarget;
 final class OtherCases
 {
     /**
-     * @var array<int, int>
-     *
-     */
-    private $otherCases;
-
-    /**
-     * @var list<int>
-     *
-     */
-    private $codePoints;
-
-    /**
      * Each table read, by the Unicode version it ships: at most one per
      * release the library knows.
      *
      * @var array<string, self>
      */
-    private static $tables = [];
+    private static array $tables = [];
+    /**
+     * @var array<int, int>
+     *
+     */
+    private array $otherCases;
+    /**
+     * @var list<int>
+     *
+     */
+    private array $codePoints;
 
     /**
      * @param array<int, int> $otherCases the other case of each character
@@ -150,7 +148,7 @@ final class OtherCases
         foreach ('' === $add ? [] : explode(' ', $add) as $run) {
             [$first, $count, $distance] = explode(':', $run);
             [$first, $count, $distance] = [intval($first, 16), intval($count, 16), intval($distance, 16)];
-            for ($offset = 0; $offset < $count; $offset++) {
+            for ($offset = 0; $offset < $count; ++$offset) {
                 // A distance of 0 is a run of pairs, each the other case of
                 // the other.
                 $otherCases[$first + $offset] = 0 === $distance ? $first + ($offset ^ 1) : $first + $offset + $distance;

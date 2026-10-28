@@ -36,30 +36,19 @@ use PHPRegex\Parser\Text\Ascii;
 final class PcreTarget
 {
     /**
+     */
+    public string $pcreVersion;
+    /**
      * The oldest release whose rules the library knows in full, 10.39.
      */
-    private const KNOWN_IN_FULL = 10039;
-
-    /**
-     * @var int
-     *
-     */
-    public $phpVersionId;
-
-    /**
-     *
-     * @var string
-     */
-    public $pcreVersion;
+    private const KNOWN_IN_FULL = 10_039;
 
     /**
      * The LC_CTYPE locale the patterns run under, as the C library names
      * it: "C" for PCRE2's own tables.
      *
-     *
-     * @var string
      */
-    public $locale;
+    public string $locale;
 
     /**
      * What supports() answered, by release number and feature name: the
@@ -69,13 +58,14 @@ final class PcreTarget
      *
      * @var array<int, array<string, bool>>
      */
-    private static $supported = [];
+    private static array $supported = [];
 
     /**
-     *
-     * @var int
      */
-    private $release;
+    private int $release;
+    /**
+     */
+    public int $phpVersionId;
 
     /**
      * @param int         $phpVersionId a PHP_VERSION_ID, 80400 for PHP 8.4
@@ -145,40 +135,35 @@ final class PcreTarget
      * were cut - 8.4.0 bundles 10.44 while 8.4.27 links 10.49. Three
      * answers exist and none collapses into another: the engine the
      * running PHP links (PCRE_VERSION), the one bundledWith() estimates
-     * for an analysed PHP, and an explicit pin the consumer holds. When
-     * they disagree, the pin wins, the running engine speaks for the
-     * analysed PHP it shares a minor with, and the estimate is the floor.
+     * for an analysed PHP, and an explicit pin the consumer holds.
+     * ParserOptions::resolveTarget() decides between them, for every entry
+     * point: the pin wins; the running engine speaks for the running PHP,
+     * and, in the lint, the language server and the bridges, for every PHP
+     * of its minor version; the estimate answers for the rest.
      */
     public static function bundledWith(int $phpVersionId): self
     {
         switch (true) {
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_44:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_44:
                 $release = '10.44';
-
                 break;
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_42:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_42:
                 $release = '10.42';
-
                 break;
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_40:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_40:
                 $release = '10.40';
-
                 break;
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_39:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_39:
                 $release = '10.39';
-
                 break;
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_35:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_35:
                 $release = '10.35';
-
                 break;
-            case $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_33:
+            case true === $phpVersionId >= PhpVersionGates::BUNDLES_PCRE2_10_33:
                 $release = '10.33';
-
                 break;
             default:
                 $release = '10.32';
-
                 break;
         }
 
@@ -226,7 +211,7 @@ final class PcreTarget
      * Whether the PCRE2 judged has a behaviour: it arrived in that release
      * or an earlier one.
      */
-    public function supports($feature): bool
+    public function supports(PcreFeature $feature): bool
     {
         if (isset(self::$supported[$this->release][$feature->name])) {
             return self::$supported[$this->release][$feature->name];
@@ -318,7 +303,9 @@ final class PcreTarget
         $hyphen = strpos($release, '-');
         $build = false === $hyphen ? null : (string) substr($release, $hyphen + 1);
         $parts = explode('.', false === $hyphen ? $release : (string) substr($release, 0, $hyphen));
-        if (2 !== \count($parts) || !Ascii::isDigit($parts[0]) || !Ascii::isDigit($parts[1])) {
+        // PCRE2 10 writes its minor with two digits: "10.4" names no
+        // release, and would read as 10.04.
+        if (2 !== \count($parts) || !Ascii::isDigit($parts[0]) || !Ascii::isDigit($parts[1]) || ('10' === ltrim($parts[0], '0') && \strlen($parts[1]) < 2)) {
             return null;
         }
         if (null !== $build && !Ascii::isAlnum($build)) {

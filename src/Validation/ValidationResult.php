@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace PHPRegex\Parser\Validation;
 
 use PHPRegex\Parser\ErrorCode;
+use PHPRegex\Parser\Node\RegexNode;
 
 /**
  * Outcome of a regex validation check.
@@ -21,60 +22,41 @@ use PHPRegex\Parser\ErrorCode;
 final class ValidationResult implements \JsonSerializable
 {
     /**
-     *
-     * @var bool
      */
-    public $isValid;
-
+    public bool $isValid;
     /**
-     *
-     * @var string|null
      */
-    public $error;
-
+    public ?string $error = null;
     /**
-     *
-     * @var int
      */
-    public $complexityScore = 0;
-
+    public int $complexityScore = 0;
     /**
-     *
-     * @var \PHPRegex\Parser\Validation\ValidationErrorCategory|null
      */
-    public $category;
-
+    public ?ValidationErrorCategory $category = null;
     /**
-     *
-     * @var int|null
      */
-    public $offset;
-
+    public ?int $offset = null;
     /**
-     *
-     * @var string|null
      */
-    public $caretSnippet;
-
+    public ?string $caretSnippet = null;
     /**
-     *
-     * @var string|null
      */
-    public $hint;
-
+    public ?string $hint = null;
     /**
-     *
-     * @var \PHPRegex\Parser\ErrorCode|null
      */
-    public $errorCode;
+    public ?ErrorCode $errorCode = null;
+    /**
+     */
+    public ?RegexNode $ast = null;
 
     /**
      * @internal built by RegexParser::validate() and Regex::validate()
      *
-     * @param ?\PHPRegex\Parser\Validation\ValidationErrorCategory::* $category
-     * @param ?\PHPRegex\Parser\ErrorCode::*                          $errorCode
+     * @param RegexNode|null $ast the tree of a valid pattern, so one
+     *                            validate() call gives the verdict and the
+     *                            tree; null whenever the pattern is not valid
      */
-    public function __construct(bool $isValid, ?string $error = null, int $complexityScore = 0, ?ValidationErrorCategory $category = null, ?int $offset = null, ?string $caretSnippet = null, ?string $hint = null, ?ErrorCode $errorCode = null)
+    public function __construct(bool $isValid, ?string $error = null, int $complexityScore = 0, ?ValidationErrorCategory $category = null, ?int $offset = null, ?string $caretSnippet = null, ?string $hint = null, ?ErrorCode $errorCode = null, ?RegexNode $ast = null)
     {
         $this->isValid = $isValid;
         $this->error = $error;
@@ -84,6 +66,7 @@ final class ValidationResult implements \JsonSerializable
         $this->caretSnippet = $caretSnippet;
         $this->hint = $hint;
         $this->errorCode = $errorCode;
+        $this->ast = $ast;
     }
 
     /**

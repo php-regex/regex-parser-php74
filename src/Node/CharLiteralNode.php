@@ -21,27 +21,19 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class CharLiteralNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $originalRepresentation;
-
+    public string $originalRepresentation;
     /**
-     *
-     * @var int
      */
-    public $codePoint;
-
+    public int $codePoint;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\CharLiteralType
      */
-    public $type;
+    public CharLiteralType $type;
 
     public function __construct(
         string $originalRepresentation,
         int $codePoint,
-        $type,
+        CharLiteralType $type,
         int $startPosition,
         int $endPosition
     ) {

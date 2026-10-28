@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Node;
 
 /**
- * Cached-instance twin of the ClassSetOperator enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The ClassSetOperator enum as a class of shared instances: ClassSetOperator::Union() returns
+ * the same instance at each call.
  */
-final class ClassSetOperator
+final class ClassSetOperator implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,47 +25,27 @@ final class ClassSetOperator
 
     public static function Union(): self
     {
-        if (!isset(self::$instances['Union'])) {
-            self::$instances['Union'] = new self('Union', 'union');
-        }
-
-        return self::$instances['Union'];
+        return self::$instances['Union'] ??= new self('Union', 'union');
     }
 
     public static function Intersection(): self
     {
-        if (!isset(self::$instances['Intersection'])) {
-            self::$instances['Intersection'] = new self('Intersection', 'intersection');
-        }
-
-        return self::$instances['Intersection'];
+        return self::$instances['Intersection'] ??= new self('Intersection', 'intersection');
     }
 
     public static function Difference(): self
     {
-        if (!isset(self::$instances['Difference'])) {
-            self::$instances['Difference'] = new self('Difference', 'difference');
-        }
-
-        return self::$instances['Difference'];
+        return self::$instances['Difference'] ??= new self('Difference', 'difference');
     }
 
     public static function SymmetricDifference(): self
     {
-        if (!isset(self::$instances['SymmetricDifference'])) {
-            self::$instances['SymmetricDifference'] = new self('SymmetricDifference', 'symmetric_difference');
-        }
-
-        return self::$instances['SymmetricDifference'];
+        return self::$instances['SymmetricDifference'] ??= new self('SymmetricDifference', 'symmetric_difference');
     }
 
     public static function Complement(): self
     {
-        if (!isset(self::$instances['Complement'])) {
-            self::$instances['Complement'] = new self('Complement', 'complement');
-        }
-
-        return self::$instances['Complement'];
+        return self::$instances['Complement'] ??= new self('Complement', 'complement');
     }
 
     /**
@@ -102,13 +64,12 @@ final class ClassSetOperator
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Node\\ClassSetOperator');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for ClassSetOperator.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

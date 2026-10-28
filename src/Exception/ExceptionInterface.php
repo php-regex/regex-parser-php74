@@ -24,4 +24,6 @@ namespace PHPRegex\Parser\Exception;
  * pattern at all. An analyser catching this interface should degrade to
  * a wider type or no shape, never report the pattern as invalid.
  */
-interface ExceptionInterface extends \Throwable {}
+interface ExceptionInterface extends \Throwable
+{
+}

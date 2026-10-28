@@ -23,7 +23,9 @@ final class PcreNumber
 {
     public const MAX = 65535;
 
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * Whether the digits, leading zeros aside, write a number past MAX: more

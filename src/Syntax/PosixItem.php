@@ -36,12 +36,12 @@ final class PosixItem
         }
 
         $length = \strlen($pattern);
-        for ($position = $bracket + 2; $length - $position >= 2; $position++) {
+        for ($position = $bracket + 2; $length - $position >= 2; ++$position) {
             $char = $pattern[$position];
             $next = $pattern[$position + 1];
 
             if ('\\' === $char && (']' === $next || '\\' === $next)) {
-                $position++;
+                ++$position;
 
                 continue;
             }

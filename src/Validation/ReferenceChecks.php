@@ -51,57 +51,35 @@ use PHPRegex\Parser\Text\NearMiss;
 final class ReferenceChecks
 {
     /**
-     * A group name in Unicode mode, and in any mode once read by the lexer.
      */
-    private const GROUP_NAME = '[_\p{L}][_\p{L}\p{Nd}]*+';
-
+    private GroupIndex $groups;
     /**
-     * @var GroupIndex
-     *
      */
-    private $groups;
-
+    private GroupNumbering $numbering;
     /**
-     * @var GroupNumbering
-     *
      */
-    private $numbering;
-
-    /**
-     * @var PcreTarget
-     *
-     */
-    private $target;
-
+    private PcreTarget $target;
     /**
      * @var \Closure(SemanticErrorException):void
      *
      */
-    private $missing;
-
+    private \Closure $missing;
     /**
-     * @var string|null
-     *
      */
-    private $pattern;
-
+    private ?string $pattern = null;
     /**
-     * @var string|null
-     *
      */
-    private $source;
-
+    private ?string $source = null;
     /**
-     * @var int
-     *
      */
-    private $offset = 0;
-
+    private int $offset = 0;
     /**
-     * @var bool
-     *
      */
-    private $utf = false;
+    private bool $utf = false;
+    /**
+     * A group name in Unicode mode, and in any mode once read by the lexer.
+     */
+    private const GROUP_NAME = '[_\p{L}][_\p{L}\p{Nd}]*+';
 
     /**
      * @param GroupIndex                             $groups    the groups of the pattern
@@ -384,29 +362,23 @@ final class ReferenceChecks
      */
     public function listedGroups(NodeInterface $node, array $groups, int $from): void
     {
-        if (null === $this->source) {
-            return;
-        }
-
-        $at = (int) strpos($this->source, '(', $from) + 1;
+        // The text only places the caret: without it, the list is checked
+        // all the same, the fault reported where the list opens.
+        $at = null === $this->source ? $from : (int) strpos($this->source, '(', $from) + 1;
         foreach ($groups as $group) {
             switch (true) {
-                case Ascii::isDigit($group):
+                case true === Ascii::isDigit($group):
                     $exists = (int) $group <= $this->numbering->maxGroupNumber;
-
                     break;
-                case 0 === strncmp($group, '+', strlen('+')):
+                case true === (0 === strncmp($group, '+', strlen('+'))):
                     $exists = ($this->groups->nextNumberAt($node) ?? 1) - 1 + (int) $group <= $this->numbering->maxGroupNumber;
-
                     break;
-                case 0 === strncmp($group, '<', strlen('<')):
-                case 0 === strncmp($group, "'", strlen("'")):
+                case true === (0 === strncmp($group, '<', strlen('<'))):
+                case true === (0 === strncmp($group, "'", strlen("'"))):
                     $exists = $this->numbering->hasNamedGroup((string) substr($group, 1, -1));
-
                     break;
                 default:
                     $exists = true;
-
                     break;
             }
 
@@ -513,7 +485,7 @@ final class ReferenceChecks
      * space after the number of "\g{" ends "\g", whose number PCRE reads
      * first.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode $node
+     * @param BackrefNode|SubroutineNode $node
      */
     private function validateReferenceName($node): void
     {
@@ -560,17 +532,14 @@ final class ReferenceChecks
 
         $written = (string) substr($source, $start, $node->getEndPosition() - $start);
         switch (true) {
-            case '' !== $digit:
+            case true === ('' !== $digit):
                 [$offset, $code, $message] = [$this->target->faultOffset($nameStart + \strlen($digit), \strlen($digit)), ErrorCode::GroupNameInvalid(), \sprintf('Invalid reference "%s": a group name must not start with a digit.', $written)];
-
                 break;
-            case '' === $read:
+            case true === ('' === $read):
                 [$offset, $code, $message] = [$nameStart, ErrorCode::GroupNameExpected(), \sprintf('Invalid reference "%s": a group name is expected at position %d.', $written, $nameStart)];
-
                 break;
             default:
                 [$offset, $code, $message] = [$closeAt, ErrorCode::GroupNameUnterminated(), \sprintf('Invalid reference "%s": the group name ends at position %d, and no "%s" closes it there.', $written, $closeAt, $closer)];
-
                 break;
         }
 
@@ -597,11 +566,11 @@ final class ReferenceChecks
         $before = ($this->groups->nextNumberAt($node) ?? 1) - 1;
 
         switch (true) {
-            case PcreNumber::exceeds($digits) || ('+' === $sign && $value + $before > PcreNumber::MAX):
+            case true === (PcreNumber::exceeds($digits) || '+' === $sign && $value + $before > PcreNumber::MAX):
                 return ErrorCode::GroupNumberTooBig();
-            case '' !== $sign && 0 === $value:
+            case true === ('' !== $sign && 0 === $value):
                 return ErrorCode::BackrefZero();
-            case '-' === $sign && $value > $before:
+            case true === ('-' === $sign && $value > $before):
                 return ErrorCode::BackrefRelative();
             default:
                 return null;
@@ -618,7 +587,7 @@ final class ReferenceChecks
      * "(?1)" is reported at its ")", and a condition "(?(2)" two characters
      * before the end of its number, where PCRE records it.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode $node
+     * @param BackrefNode|SubroutineNode $node
      */
     private function missingReferenceOffset($node): int
     {
@@ -732,7 +701,7 @@ final class ReferenceChecks
     {
         $number = 0;
         $length = \strlen($digits);
-        for ($index = 0; $index < $length && Ascii::isDigit($digits[$index]); $index++) {
+        for ($index = 0; $index < $length && Ascii::isDigit($digits[$index]); ++$index) {
             $number = $number * 10 + (int) $digits[$index];
             if ($number > PcreNumber::MAX) {
                 return $index;
@@ -747,9 +716,9 @@ final class ReferenceChecks
      * it looks up any group: a forward relative number counts the groups
      * before it too.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode $node
-     * @param string                                                                 $sign   "+", "-" or "", as written
-     * @param string                                                                 $digits the number, as written
+     * @param string                     $sign   "+", "-" or "", as written
+     * @param string                     $digits the number, as written
+     * @param BackrefNode|SubroutineNode $node
      */
     private function guardGroupNumberSize($node, string $sign, string $digits): void
     {
@@ -772,7 +741,7 @@ final class ReferenceChecks
         }
     }
 
-    private function assertAbsoluteReferenceExists(int $num, int $position, $code, string $context): void
+    private function assertAbsoluteReferenceExists(int $num, int $position, ErrorCode $code, string $context): void
     {
         if ($num <= 0 || $num > $this->numbering->maxGroupNumber) {
             $this->raiseMissingReference(
@@ -784,9 +753,9 @@ final class ReferenceChecks
     }
 
     /**
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode|null $node
+     * @param BackrefNode|SubroutineNode|null $node
      */
-    private function assertRelativeReferenceExists(int $offset, int $position, $code, string $context, $node = null): void
+    private function assertRelativeReferenceExists(int $offset, int $position, ErrorCode $code, string $context, $node = null): void
     {
         if (0 === $offset) {
             $this->raise(
@@ -826,21 +795,21 @@ final class ReferenceChecks
      * reset numbers its groups from the same number. A node of no indexed
      * tree names no group, nor does "(?(R-1)", which PCRE refuses to read.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode|null $node
+     * @param BackrefNode|SubroutineNode|null $node
      */
     private function relativeTargetExists($node): bool
     {
         switch (true) {
-            case $node instanceof BackrefNode:
+            case true === $node instanceof BackrefNode:
                 return [] !== $this->groups->groupsReferencedBy($node);
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 return [] !== $this->groups->groupsCalledBy($node);
             default:
                 return false;
         }
     }
 
-    private function assertSubroutineReferenceExists(int $num, int $position, $code, string $context): void
+    private function assertSubroutineReferenceExists(int $num, int $position, ErrorCode $code, string $context): void
     {
         if ($num > 0) {
             $this->assertAbsoluteReferenceExists($num, $position, $code, $context);
@@ -855,9 +824,9 @@ final class ReferenceChecks
      * Without UTF mode a name holds ASCII word characters only: PCRE stops
      * reading it on the first byte above 0x7F and refuses what follows there.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode $node
+     * @param BackrefNode|SubroutineNode $node
      */
-    private function guardByteModeName($node, string $name, $code): void
+    private function guardByteModeName($node, string $name, ErrorCode $code): void
     {
         if ($this->utf || null === $this->source || 1 !== LibraryPcre::match('/[\x80-\xFF]/', $name)) {
             return;
@@ -877,16 +846,16 @@ final class ReferenceChecks
      * A reference to a group the pattern does not have, which the validator
      * raises when PCRE would.
      */
-    private function raiseMissingReference(string $message, int $position, $code, ?string $hint = null): void
+    private function raiseMissingReference(string $message, int $position, ErrorCode $code, ?string $hint = null): void
     {
-        ($this->missing)(new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, $hint));
+        ($this->missing)(new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, null, $hint));
     }
 
     /**
      * @return never
      */
-    private function raise(string $message, int $position, $code, ?string $hint = null)
+    private function raise(string $message, int $position, ErrorCode $code, ?string $hint = null)
     {
-        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, $hint);
+        throw new SemanticErrorException($message, $code, $position + $this->offset, $this->pattern, null, null, $hint);
     }
 }

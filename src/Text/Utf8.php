@@ -20,7 +20,9 @@ namespace PHPRegex\Parser\Text;
  */
 final class Utf8
 {
-    private function __construct() {}
+    private function __construct()
+    {
+    }
 
     /**
      * Whether the byte continues a UTF-8 character, 0x80 to 0xBF, rather
@@ -37,11 +39,11 @@ final class Utf8
     public static function encodedLength(int $codePoint): int
     {
         switch (true) {
-            case $codePoint < 0x80:
+            case true === $codePoint < 0x80:
                 return 1;
-            case $codePoint < 0x800:
+            case true === $codePoint < 0x800:
                 return 2;
-            case $codePoint < 0x10000:
+            case true === $codePoint < 0x10000:
                 return 3;
             default:
                 return 4;
@@ -59,11 +61,11 @@ final class Utf8
         $byte = \ord($text[$at] ?? "\0");
 
         switch (true) {
-            case $byte >= 0xF0:
+            case true === $byte >= 0xF0:
                 return 4;
-            case $byte >= 0xE0:
+            case true === $byte >= 0xE0:
                 return 3;
-            case $byte >= 0xC0:
+            case true === $byte >= 0xC0:
                 return 2;
             default:
                 return 1;

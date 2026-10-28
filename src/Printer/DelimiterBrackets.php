@@ -111,7 +111,7 @@ final class DelimiterBrackets
 
         while (false !== ($start = strpos($source, '\\', $offset))) {
             while ($text < $count && $texts[$text][1] <= $start) {
-                $text++;
+                ++$text;
             }
 
             if ($text < $count && $texts[$text][0] <= $start) {
@@ -226,19 +226,16 @@ final class DelimiterBrackets
                 $at = $i + $markLength;
                 $quoted = 'Q' === $body[$at];
                 $bracket = $body[$quoted ? $at + 1 : $at];
-                switch ($bracket) {
-                    case '{':
+                switch (true) {
+                    case '{' === $bracket:
                         $standsBare = 1 !== LibraryPcre::match($repeat, $body, $matches, 0, $at)
                             && !($i >= 2 && '\\' === $body[$i - 2] && Ascii::isAlpha($body[$i - 1]));
-
                         break;
-                    case '[':
+                    case '[' === $bracket:
                         $standsBare = false === strpos(':.=', $body[$at + 1] ?? ':');
-
                         break;
                     default:
                         $standsBare = true;
-
                         break;
                 }
                 $bare[$i] = !$quoted && $standsBare;
@@ -259,7 +256,7 @@ final class DelimiterBrackets
             if ($opening === $character || $closing === $character) {
                 $tokens[] = [$i, $opening === $character, false];
             }
-            $i++;
+            ++$i;
         }
 
         $unescaped = self::countedLiterals($tokens);
@@ -270,17 +267,14 @@ final class DelimiterBrackets
             $bracketAt = $at + $markLength + ('Q' === $body[$at + $markLength] ? 1 : 0);
             $bracket = $body[$bracketAt];
             switch (true) {
-                case !isset($unescaped[$at]):
+                case true === !isset($unescaped[$at]):
                     $spelling = '\\'.$bracket;
-
                     break;
-                case $bare[$at]:
+                case true === $bare[$at]:
                     $spelling = $bracket;
-
                     break;
                 default:
                     $spelling = '\\Q'.$bracket.'\\E';
-
                     break;
             }
             $result .= substr($body, $from, $at - $from).$spelling;
@@ -336,25 +330,20 @@ final class DelimiterBrackets
             }
 
             switch (true) {
-                case self::KIND_GROUP === $kind:
+                case true === (self::KIND_GROUP === $kind):
                     $spelling = self::groupSpelling((string) substr($body, $start + \strlen($mark) + 1, $end - $start - \strlen($mark) - 1), $included[$index]);
-
                     break;
-                case self::KIND_COMMENT === $kind:
+                case true === (self::KIND_COMMENT === $kind):
                     $spelling = $included[$index] ? $bracket : '';
-
                     break;
-                case !$included[$index]:
+                case true === !$included[$index]:
                     $spelling = '\\'.$bracket;
-
                     break;
-                case self::KIND_LITERAL === $kind && self::standsBare($body, $start, $end, $bracket, $mark):
+                case true === (self::KIND_LITERAL === $kind && self::standsBare($body, $start, $end, $bracket, $mark)):
                     $spelling = $bracket;
-
                     break;
                 default:
                     $spelling = '\\Q'.$bracket.'\\E';
-
                     break;
             }
             $result .= substr($body, $from, $start - $from).$spelling;
@@ -373,18 +362,18 @@ final class DelimiterBrackets
     {
         $depth = 0;
         $length = \strlen($body);
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $length; ++$i) {
             $character = $body[$i];
             if ('\\' === $character) {
-                $i++;
+                ++$i;
             } elseif ($closing === $character) {
                 if ($opening === $closing || 0 === $depth) {
                     return false;
                 }
 
-                $depth--;
+                --$depth;
             } elseif ($opening === $character) {
-                $depth++;
+                ++$depth;
             }
         }
 
@@ -453,17 +442,17 @@ final class DelimiterBrackets
             }
 
             if ('\\' === $source[$i]) {
-                $i++;
+                ++$i;
 
                 continue;
             }
 
             while ($span < $count && $spans[$span][1] <= $i) {
-                $span++;
+                ++$span;
             }
 
             while ($quote < $quotes && $quotedSpans[$quote][1] <= $i) {
-                $quote++;
+                ++$quote;
             }
 
             $owner = $span < $count && $spans[$span][0] <= $i ? $spans[$span][2] : null;
@@ -525,8 +514,8 @@ final class DelimiterBrackets
      * comment's, and a comment's when every comment stays or when it pairs
      * with a bracket written as is.
      *
-     * @param \PHPRegex\Parser\Node\CommentNode|bool|null $owner
-     * @param array<int, true>                            $whole the comments paired with a bracket written as is
+     * @param array<int, true>      $whole the comments paired with a bracket written as is
+     * @param CommentNode|bool|null $owner
      */
     private static function stays($owner, bool $all, array $whole): bool
     {
@@ -658,7 +647,7 @@ final class DelimiterBrackets
             }
 
             $id = spl_object_id($owner);
-            if (!$owner->extended && !isset($trimmed[$id])) {
+            if (!$owner->isExtended && !isset($trimmed[$id])) {
                 $kept[$id] = strtr($owner->comment, "\r\n", '  ');
             } else {
                 $kept[$id] = ($kept[$id] ?? '').($isOpening ? $opening : $closing);
@@ -697,10 +686,10 @@ final class DelimiterBrackets
             if ($isLiteral && $isOpening) {
                 $literalOpenings[] = $offset;
             } elseif ($isLiteral && $openingsAlone > 0) {
-                $openingsAlone--;
+                --$openingsAlone;
                 $unescaped[$offset] = true;
             } elseif (isset($alone[$index]) && $isOpening) {
-                $openingsAlone++;
+                ++$openingsAlone;
             } elseif (isset($alone[$index]) && [] !== $literalOpenings) {
                 $unescaped[array_pop($literalOpenings)] = true;
             }
@@ -791,7 +780,7 @@ final class DelimiterBrackets
 
         $spelled = '';
         $length = \strlen($body);
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $length; ++$i) {
             if ('\\' !== $body[$i]) {
                 $spelled .= $body[$i];
 
@@ -826,7 +815,7 @@ final class DelimiterBrackets
 
         $spelled = '';
         $length = \strlen($body);
-        for ($i = 0; $i < $length; $i++) {
+        for ($i = 0; $i < $length; ++$i) {
             if ('\\' !== $body[$i]) {
                 $spelled .= $body[$i];
 
@@ -869,18 +858,15 @@ final class DelimiterBrackets
                     continue;
                 }
 
-                switch ($flag) {
-                    case self::MARK_QUOTED:
+                switch (true) {
+                    case self::MARK_QUOTED === $flag:
                         $kind = self::KIND_QUOTED;
-
                         break;
-                    case self::MARK_COMMENT:
+                    case self::MARK_COMMENT === $flag:
                         $kind = self::KIND_COMMENT;
-
                         break;
                     default:
                         $kind = self::KIND_LITERAL;
-
                         break;
                 }
                 $flagged = self::MARK_BARE === $flag || self::KIND_LITERAL !== $kind;
@@ -902,7 +888,7 @@ final class DelimiterBrackets
             if ($opening === $character || $closing === $character) {
                 $tokens[] = [$i, $i + 1, $character, $opening === $character, self::KIND_FIXED, true];
             }
-            $i++;
+            ++$i;
         }
 
         return $tokens;
@@ -973,13 +959,13 @@ final class DelimiterBrackets
             }
 
             if ($opens) {
-                $depth++;
+                ++$depth;
 
                 continue;
             }
 
             if ($depth > 0) {
-                $depth--;
+                --$depth;
                 if (self::KIND_GROUP === $kind) {
                     $groups[] = $index;
                 } elseif (self::KIND_FIXED !== $kind) {
@@ -1025,17 +1011,17 @@ final class DelimiterBrackets
         if ('}' === $bracket) {
             $count = $start;
             while ($count > 0 && false !== strpos(" \t0123456789,", $body[$count - 1])) {
-                $count--;
+                --$count;
             }
 
             return 0 === $count || '{' !== $body[$count - 1];
         }
 
-        switch ($bracket) {
-            case '{':
+        switch (true) {
+            case '{' === $bracket:
                 return 1 !== LibraryPcre::match('/\G[ \t]*+(?:[0-9]++[ \t]*+(?:,[ \t]*+[0-9]*+[ \t]*+)?|,[ \t]*+[0-9]++[ \t]*+)(?:\\\\|'.preg_quote($mark, '/').'[BQ]?)?\}/', $body, $matches, 0, $end)
                     && !($start >= 2 && '\\' === $body[$start - 2] && Ascii::isAlpha($body[$start - 1]));
-            case '[':
+            case '[' === $bracket:
                 return false === strpos(':.=', $body[$end] ?? ':');
             default:
                 return true;

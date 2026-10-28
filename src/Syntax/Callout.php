@@ -75,12 +75,7 @@ final class Callout
             }
             $position = self::fault($pattern, $startPosition, $target)[0] ?? $startPosition + 4;
 
-            throw SyntaxErrorException::withContext(
-                \sprintf('Invalid callout argument: %s at position %d: %s.', $value, $position, self::problem($code)),
-                $code,
-                $position,
-                $pattern,
-            );
+            throw SyntaxErrorException::withContext(\sprintf('Invalid callout argument: %s at position %d: %s.', $value, $position, self::problem($code)), $code, $position, $pattern);
         }
 
         // A doubled closing delimiter stands for itself: "(?C{a}}b})".
@@ -91,12 +86,7 @@ final class Callout
             $code = $closed ? ErrorCode::CalloutUnclosed() : ErrorCode::CalloutUnclosedString();
             $position = self::fault($pattern, $startPosition, $target)[0] ?? $startPosition;
 
-            throw SyntaxErrorException::withContext(
-                \sprintf('Invalid callout argument: %s at position %d: %s.', $value, $position, self::problem($code)),
-                $code,
-                $position,
-                $pattern,
-            );
+            throw SyntaxErrorException::withContext(\sprintf('Invalid callout argument: %s at position %d: %s.', $value, $position, self::problem($code)), $code, $position, $pattern);
         }
 
         return new CalloutNode(str_replace($closing.$closing, $closing, $matches[1]), true, $startPosition, $endPosition);
@@ -154,16 +144,16 @@ final class Callout
     /**
      * What is wrong with a callout fault() refuses, in words.
      */
-    public static function problem($code): string
+    public static function problem(ErrorCode $code): string
     {
-        switch ($code) {
-            case ErrorCode::CalloutOutOfRange():
+        switch (true) {
+            case $code === ErrorCode::CalloutOutOfRange():
                 return 'the callout number is greater than 255';
-            case ErrorCode::CalloutInvalidDelimiter():
+            case $code === ErrorCode::CalloutInvalidDelimiter():
                 return 'a callout takes a number, or a string opened by one of ` \' " ^ % # $ {';
-            case ErrorCode::CalloutUnclosedString():
+            case $code === ErrorCode::CalloutUnclosedString():
                 return 'the callout string is not closed by its delimiter';
-            case ErrorCode::CalloutUnclosed():
+            case $code === ErrorCode::CalloutUnclosed():
                 return '")" is expected after the callout argument';
             default:
                 return '")" is expected to close the callout';

@@ -46,13 +46,18 @@ final class StructuralFingerprint
         ]);
     }
 
+    /**
+     * @return mixed
+     */
     private static function canonical(NodeInterface $node, bool $unicode)
     {
         if ($node instanceof SequenceNode) {
             return self::canonicalSequence($node, $unicode);
         }
 
-        if (($node instanceof CharLiteralNode && ($unicode || $node->codePoint < 256)) || $node instanceof ControlCharNode) {
+        // A character of no code point (-1), a "\N{name}" whose name reads as
+        // no character, is kept as written below.
+        if (($node instanceof CharLiteralNode && $node->codePoint >= 0 && ($unicode || $node->codePoint < 256)) || $node instanceof ControlCharNode) {
             return ['literal', false, $unicode ? mb_chr($node->codePoint, 'UTF-8') : \chr($node->codePoint)];
         }
 
@@ -71,21 +76,17 @@ final class StructuralFingerprint
             }
 
             switch (true) {
-                case $value instanceof NodeInterface:
+                case true === $value instanceof NodeInterface:
                     $canonical[$name] = self::canonical($value, $unicode);
-
                     break;
-                case \is_array($value):
+                case true === \is_array($value):
                     $canonical[$name] = array_map(static fn ($item) => $item instanceof NodeInterface ? self::canonical($item, $unicode) : $item, $value);
-
                     break;
-                case $value instanceof \UnitEnum:
+                case true === $value instanceof \PHPRegex\Parser\UnitEnum:
                     $canonical[$name] = $value->name;
-
                     break;
                 default:
                     $canonical[$name] = $value;
-
                     break;
             }
         }
@@ -105,6 +106,8 @@ final class StructuralFingerprint
      * A sequence flattened, without what matches only the empty string (its
      * comments and empty groups), its neighbouring literals joined; a
      * sequence of one item is that item.
+     *
+     * @return mixed
      */
     private static function canonicalSequence(SequenceNode $sequence, bool $unicode)
     {
@@ -124,11 +127,12 @@ final class StructuralFingerprint
 
             $items[] = $item;
         }
+        $matchSubject130 = \count($items);
 
-        switch (\count($items)) {
-            case 0:
+        switch (true) {
+            case 0 === $matchSubject130:
                 return ['literal', false, ''];
-            case 1:
+            case 1 === $matchSubject130:
                 return $items[0];
             default:
                 return ['sequence', $items];
@@ -154,12 +158,17 @@ final class StructuralFingerprint
 
     /**
      * @phpstan-assert-if-true array{0: 'literal', 1: bool, 2: string} $item
+     *
+     * @param mixed $item
      */
     private static function isLiteral($item): bool
     {
         return \is_array($item) && 'literal' === ($item[0] ?? null) && \is_bool($item[1] ?? null) && \is_string($item[2] ?? null);
     }
 
+    /**
+     * @param mixed $item
+     */
     private static function isEmptyLiteral($item): bool
     {
         return self::isLiteral($item) && '' === $item[2];

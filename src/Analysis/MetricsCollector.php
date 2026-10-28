@@ -57,22 +57,13 @@ final class MetricsCollector extends AbstractNodeVisitor
     /**
      * @var array<string, int>
      */
-    private $counts = [];
+    private array $counts = [];
 
-    /**
-     * @var int
-     */
-    private $total = 0;
+    private int $total = 0;
 
-    /**
-     * @var int
-     */
-    private $maxDepth = 0;
+    private int $maxDepth = 0;
 
-    /**
-     * @var int
-     */
-    private $currentDepth = 0;
+    private int $currentDepth = 0;
 
     #[\Override]
     public function visitRegex(RegexNode $node): array
@@ -293,18 +284,22 @@ final class MetricsCollector extends AbstractNodeVisitor
             $this->maxDepth = 0;
         }
 
-        $this->total++;
+        ++$this->total;
         $type = $this->shortName(get_class($node));
         $this->counts[$type] = ($this->counts[$type] ?? 0) + 1;
 
-        $this->currentDepth++;
+        ++$this->currentDepth;
         $this->maxDepth = max($this->maxDepth, $this->currentDepth);
 
-        if (null !== $traverse) {
-            $traverse();
+        // The depth comes back whatever happens below: a collector reused
+        // after a failure counts the next tree afresh.
+        try {
+            if (null !== $traverse) {
+                $traverse();
+            }
+        } finally {
+            --$this->currentDepth;
         }
-
-        $this->currentDepth--;
 
         return $this->snapshot();
     }

@@ -30,17 +30,16 @@ namespace PHPRegex\Parser\Analysis;
 final class CaptureLayout
 {
     /**
+     * @var list<CaptureKey>
+     *
+     */
+    public array $keys;
+    /**
      * Past this many values, a group's literals say less than its facts.
      */
     private const MAX_LITERALS = 16;
 
     private const CONTROL_CHARACTERS = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F\x7F";
-
-    /**
-     * @var list<CaptureKey>
-     *
-     */
-    public $keys;
 
     /**
      * @param list<CaptureKey> $keys
@@ -195,13 +194,15 @@ final class CaptureLayout
      */
     private static function readsUnset(CaptureGroupShape $group, bool $unmatchedAsNull, int $lastAlways, int $lastMaySet): bool
     {
-        switch ($group->participation) {
-            case Participation::Always():
+        switch (true) {
+            case $group->participation === Participation::Always():
                 return false;
-            case Participation::Never():
+            case $group->participation === Participation::Never():
                 return true;
-            case Participation::MayBeUnset():
+            case $group->participation === Participation::MayBeUnset():
                 return $unmatchedAsNull || $group->number <= $lastAlways || $group->number < $lastMaySet;
+            default:
+                throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($group->participation));
         }
     }
 

@@ -2,38 +2,20 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser\Node;
 
 /**
- * Cached-instance twin of the GroupType enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The GroupType enum as a class of shared instances: GroupType::Capturing() returns
+ * the same instance at each call.
  */
-final class GroupType
+final class GroupType implements \PHPRegex\Parser\BackedEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
+    public string $value;
 
     private function __construct(string $name, string $value)
     {
@@ -43,101 +25,57 @@ final class GroupType
 
     public static function Capturing(): self
     {
-        if (!isset(self::$instances['Capturing'])) {
-            self::$instances['Capturing'] = new self('Capturing', 'capturing');
-        }
-
-        return self::$instances['Capturing'];
+        return self::$instances['Capturing'] ??= new self('Capturing', 'capturing');
     }
 
     public static function NonCapturing(): self
     {
-        if (!isset(self::$instances['NonCapturing'])) {
-            self::$instances['NonCapturing'] = new self('NonCapturing', 'non_capturing');
-        }
-
-        return self::$instances['NonCapturing'];
+        return self::$instances['NonCapturing'] ??= new self('NonCapturing', 'non_capturing');
     }
 
     public static function Named(): self
     {
-        if (!isset(self::$instances['Named'])) {
-            self::$instances['Named'] = new self('Named', 'named');
-        }
-
-        return self::$instances['Named'];
+        return self::$instances['Named'] ??= new self('Named', 'named');
     }
 
     public static function LookaheadPositive(): self
     {
-        if (!isset(self::$instances['LookaheadPositive'])) {
-            self::$instances['LookaheadPositive'] = new self('LookaheadPositive', 'lookahead_positive');
-        }
-
-        return self::$instances['LookaheadPositive'];
+        return self::$instances['LookaheadPositive'] ??= new self('LookaheadPositive', 'lookahead_positive');
     }
 
     public static function LookaheadNegative(): self
     {
-        if (!isset(self::$instances['LookaheadNegative'])) {
-            self::$instances['LookaheadNegative'] = new self('LookaheadNegative', 'lookahead_negative');
-        }
-
-        return self::$instances['LookaheadNegative'];
+        return self::$instances['LookaheadNegative'] ??= new self('LookaheadNegative', 'lookahead_negative');
     }
 
     public static function LookbehindPositive(): self
     {
-        if (!isset(self::$instances['LookbehindPositive'])) {
-            self::$instances['LookbehindPositive'] = new self('LookbehindPositive', 'lookbehind_positive');
-        }
-
-        return self::$instances['LookbehindPositive'];
+        return self::$instances['LookbehindPositive'] ??= new self('LookbehindPositive', 'lookbehind_positive');
     }
 
     public static function LookbehindNegative(): self
     {
-        if (!isset(self::$instances['LookbehindNegative'])) {
-            self::$instances['LookbehindNegative'] = new self('LookbehindNegative', 'lookbehind_negative');
-        }
-
-        return self::$instances['LookbehindNegative'];
+        return self::$instances['LookbehindNegative'] ??= new self('LookbehindNegative', 'lookbehind_negative');
     }
 
     public static function InlineFlags(): self
     {
-        if (!isset(self::$instances['InlineFlags'])) {
-            self::$instances['InlineFlags'] = new self('InlineFlags', 'inline_flags');
-        }
-
-        return self::$instances['InlineFlags'];
+        return self::$instances['InlineFlags'] ??= new self('InlineFlags', 'inline_flags');
     }
 
     public static function Atomic(): self
     {
-        if (!isset(self::$instances['Atomic'])) {
-            self::$instances['Atomic'] = new self('Atomic', 'atomic');
-        }
-
-        return self::$instances['Atomic'];
+        return self::$instances['Atomic'] ??= new self('Atomic', 'atomic');
     }
 
     public static function BranchReset(): self
     {
-        if (!isset(self::$instances['BranchReset'])) {
-            self::$instances['BranchReset'] = new self('BranchReset', 'branch_reset');
-        }
-
-        return self::$instances['BranchReset'];
+        return self::$instances['BranchReset'] ??= new self('BranchReset', 'branch_reset');
     }
 
     public static function ScanSubstring(): self
     {
-        if (!isset(self::$instances['ScanSubstring'])) {
-            self::$instances['ScanSubstring'] = new self('ScanSubstring', 'scan_substring');
-        }
-
-        return self::$instances['ScanSubstring'];
+        return self::$instances['ScanSubstring'] ??= new self('ScanSubstring', 'scan_substring');
     }
 
     /**
@@ -162,13 +100,12 @@ final class GroupType
 
     public static function from(string $value): self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
-            }
+        $case = self::tryFrom($value);
+        if (null === $case) {
+            throw new \ValueError('"'.$value.'" is not a valid backing value for enum PHPRegex\\Parser\\Node\\GroupType');
         }
 
-        throw new \InvalidArgumentException(sprintf('Unknown value %s for GroupType.', $value));
+        return $case;
     }
 
     public static function tryFrom(string $value): ?self

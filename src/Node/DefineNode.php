@@ -21,10 +21,8 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class DefineNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $content;
+    public NodeInterface $content;
 
     public function __construct(
         NodeInterface $content,

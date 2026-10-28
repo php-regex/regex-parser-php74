@@ -45,9 +45,9 @@ use PHPRegex\Parser\Text\Ascii;
  */
 final class LibraryPcre
 {
-    public const BACKTRACK_LIMIT_FLOOR = 1000000;
+    public const BACKTRACK_LIMIT_FLOOR = 1_000_000;
 
-    public const RECURSION_LIMIT_FLOOR = 100000;
+    public const RECURSION_LIMIT_FLOOR = 100_000;
 
     private const FLOORS = [
         'pcre.backtrack_limit' => self::BACKTRACK_LIMIT_FLOOR,
@@ -57,20 +57,15 @@ final class LibraryPcre
     /**
      * @var (\Closure(string, string): (string|false))|null
      */
-    private static $iniSetter;
+    private static ?\Closure $iniSetter = null;
 
-    /**
-     * @var int
-     */
-    private static $lastError = \PREG_NO_ERROR;
+    private static int $lastError = \PREG_NO_ERROR;
 
     /**
      * How many calls of run() are under way: a window, in which no user
      * code runs, so the limits stay where it put them.
-     *
-     * @var int
      */
-    private static $depth = 0;
+    private static int $depth = 0;
 
     /**
      * What the open window raised, each limit with the caller's value:
@@ -78,7 +73,7 @@ final class LibraryPcre
      *
      * @var array<string, string>
      */
-    private static $windowRaised = [];
+    private static array $windowRaised = [];
 
     /**
      * Replaces ini_set for the raise and the restore; null brings the
@@ -112,7 +107,7 @@ final class LibraryPcre
         $raised = [];
         // Counted before the raise, and uncounted in the same finally, so a
         // raise or a restore that throws leaves the count where it was.
-        self::$depth++;
+        ++self::$depth;
 
         try {
             // Inside a window the limits are already where they can be put.
@@ -143,7 +138,7 @@ final class LibraryPcre
                 if (1 === self::$depth) {
                     self::$windowRaised = [];
                 }
-                self::$depth--;
+                --self::$depth;
             }
         }
     }
@@ -210,10 +205,12 @@ final class LibraryPcre
      *     )
      * ) $matches
      *
-     * @throws InternalFailureException when the regex gives no answer
+     * @param mixed $matches
      *
      * @return 0|1|false false only for a subject or an offset that is not
      *                   UTF-8 for a "u" regex
+     *
+     * @throws InternalFailureException when the regex gives no answer
      */
     public static function match(string $pattern, string $subject, &$matches = null, int $flags = 0, int $offset = 0)
     {
@@ -259,10 +256,12 @@ final class LibraryPcre
      *     )
      * ) $matches
      *
-     * @throws InternalFailureException when the regex gives no answer
+     * @param mixed $matches
      *
      * @return 0|positive-int|false false only for a subject or an offset
      *                              that is not UTF-8 for a "u" regex
+     *
+     * @throws InternalFailureException when the regex gives no answer
      */
     public static function matchAll(string $pattern, string $subject, &$matches = null, int $flags = 0, int $offset = 0)
     {
@@ -291,10 +290,12 @@ final class LibraryPcre
      *
      * @param-out 0|positive-int $count
      *
-     * @throws InternalFailureException when the regex gives no answer
+     * @param mixed $count
      *
      * @return ($subject is array ? array<string>|null : string|null) null only
      *                                                                for a subject that is not UTF-8 for a "u" regex
+     *
+     * @throws InternalFailureException when the regex gives no answer
      */
     public static function replace($pattern, $replacement, $subject, int $limit = -1, &$count = null)
     {
@@ -327,10 +328,12 @@ final class LibraryPcre
      *
      * @param-out 0|positive-int $count
      *
-     * @throws InternalFailureException when the regex gives no answer
+     * @param mixed $count
      *
      * @return ($subject is array ? array<string>|null : string|null) null only
      *                                                                for a subject that is not UTF-8 for a "u" regex
+     *
+     * @throws InternalFailureException when the regex gives no answer
      */
     public static function replaceCallback($pattern, callable $callback, $subject, int $limit = -1, &$count = null, int $flags = 0)
     {
@@ -355,10 +358,10 @@ final class LibraryPcre
     /**
      * @param int-mask<\PREG_SPLIT_NO_EMPTY, \PREG_SPLIT_DELIM_CAPTURE, \PREG_SPLIT_OFFSET_CAPTURE> $flags
      *
-     * @throws InternalFailureException when the regex gives no answer
-     *
      * @return ($flags is 0|1|2|3 ? list<string>|false : list<array{string, int<0, max>}>|false) false
      *                                                                                           only for a subject that is not UTF-8 for a "u" regex
+     *
+     * @throws InternalFailureException when the regex gives no answer
      */
     public static function split(string $pattern, string $subject, int $limit = -1, int $flags = 0)
     {
@@ -460,23 +463,20 @@ final class LibraryPcre
 
             return \is_int($quantity) ? $quantity : 0;
         }
+        $matchSubject463 = Ascii::lower(substr($value, -1));
 
-        switch (Ascii::lower(substr($value, -1))) {
-            case 'g':
+        switch (true) {
+            case 'g' === $matchSubject463:
                 $shift = 30;
-
                 break;
-            case 'm':
+            case 'm' === $matchSubject463:
                 $shift = 20;
-
                 break;
-            case 'k':
+            case 'k' === $matchSubject463:
                 $shift = 10;
-
                 break;
             default:
                 $shift = 0;
-
                 break;
         }
 

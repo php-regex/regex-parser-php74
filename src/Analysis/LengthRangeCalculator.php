@@ -38,7 +38,6 @@ use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
@@ -60,16 +59,30 @@ use PHPRegex\Parser\Node\VersionConditionNode;
  */
 final class LengthRangeCalculator extends AbstractNodeVisitor
 {
-    /**
-     * @var bool
-     */
-    private $unicode = false;
-
+    private bool $unicode = false;
     /**
      * @var \Closure(SubroutineNode):?NodeInterface|null
      *
      */
-    private $calledBody;
+    private ?\Closure $calledBody = null;
+    /**
+     * @var list<GroupType>|null
+     */
+    private static ?array $LOOKAROUNDS = null;
+
+    /**
+     * @return list<GroupType>
+     */
+    private static function LOOKAROUNDS(): array
+    {
+        return self::$LOOKAROUNDS ??= [
+            GroupType::LookaheadPositive(),
+            GroupType::LookaheadNegative(),
+            GroupType::LookbehindPositive(),
+            GroupType::LookbehindNegative(),
+            GroupType::ScanSubstring(),
+        ];
+    }
 
     /**
      * A call reads as unbounded from zero, unless $calledBody gives the body
@@ -127,14 +140,15 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
 
             // Past a "(*ACCEPT)" the match may already be over.
             if (!$accepted) {
-                $totalMin += $childMin;
+                $totalMin = self::sum($totalMin, $childMin) ?? \PHP_INT_MAX;
             }
             $accepted = $accepted || AcceptVerb::mayEndMatch($child);
 
-            if (null === $childMax) {
+            $sum = null === $childMax ? null : self::sum($totalMax, $childMax);
+            if (null === $sum) {
                 $hasInfinite = true;
             } else {
-                $totalMax += $childMax;
+                $totalMax = $sum;
             }
         }
 
@@ -161,14 +175,14 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
         [$childMin, $childMax] = $node->node->accept($this);
 
         // Parse quantifier
-        $range = $this->parseQuantifierRange($node->quantifier);
+        $range = $this->parseQuantifierRange($node);
         $qMin = $range[0];
         $qMax = $range[1];
 
-        $min = $childMin * $qMin;
+        $min = self::product($childMin, $qMin) ?? \PHP_INT_MAX;
         $max = null;
         if (null !== $childMax && null !== $qMax) {
-            $max = $childMax * $qMax;
+            $max = self::product($childMax, $qMax);
         }
 
         return [$min, $max];
@@ -195,10 +209,10 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
     #[\Override]
     public function visitCharType(CharTypeNode $node): array
     {
-        switch ($node->value) {
-            case 'R':
+        switch (true) {
+            case 'R' === $node->value:
                 return [1, 2];
-            case 'X':
+            case 'X' === $node->value:
                 return [1, null];
             default:
                 return [1, 1];
@@ -343,28 +357,30 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
         return [0, 0];
     }
 
-    private static function LOOKAROUNDS(): array
+    /**
+     * The sum of two lengths, or null past PHP_INT_MAX: the parser takes a
+     * pattern longer than any integer, which PCRE refuses as too large. A
+     * minimum saturates there, a maximum reads as unbounded.
+     */
+    private static function sum(int $a, int $b): ?int
     {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [
-                GroupType::LookaheadPositive(),
-                GroupType::LookaheadNegative(),
-                GroupType::LookbehindPositive(),
-                GroupType::LookbehindNegative(),
-                GroupType::ScanSubstring(),
-            ];
-        }
+        return $a > \PHP_INT_MAX - $b ? null : $a + $b;
+    }
 
-        return $cache;
+    /**
+     * The product of a length and a count, or null past PHP_INT_MAX.
+     */
+    private static function product(int $length, int $count): ?int
+    {
+        return 0 !== $count && $length > intdiv(\PHP_INT_MAX, $count) ? null : $length * $count;
     }
 
     /**
      * @return LengthRange
      */
-    private function parseQuantifierRange(string $q): array
+    private function parseQuantifierRange(QuantifierNode $node): array
     {
-        $bounds = QuantifierBounds::parse($q);
+        $bounds = $node->bounds;
 
         return null === $bounds ? [1, 1] : [$bounds->min, $bounds->max];
     }

@@ -13,35 +13,29 @@ declare(strict_types=1);
 
 namespace PHPRegex\Parser\Exception;
 
+use PHPRegex\Parser\ErrorCode;
+
 /**
  * Base exception for all regex-related errors.
  */
 class RegexException extends \Exception implements ExceptionInterface
 {
     /**
-     *
-     * @var \PHPRegex\Parser\ErrorCode
      */
-    public $errorCode;
-
+    public ErrorCode $errorCode;
     /**
-     *
-     * @var int|null
      */
-    public $position;
-
+    public ?int $position = null;
     /**
-     *
-     * @var string|null
      */
-    public $snippet;
+    public ?string $snippet = null;
 
     /**
      * @internal the library throws its exceptions; catch them, read them
      */
     public function __construct(
         string $message,
-        $errorCode,
+        ErrorCode $errorCode,
         ?int $position = null,
         ?string $snippet = null,
         ?\Throwable $previous = null

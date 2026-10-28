@@ -52,10 +52,7 @@ use PHPRegex\Parser\Node\VersionConditionNode;
  */
 final class NodeDumper extends AbstractNodeVisitor
 {
-    /**
-     * @var int
-     */
-    private $indent = 0;
+    private int $indent = 0;
 
     #[\Override]
     public function visitRegex(RegexNode $node): string
@@ -183,23 +180,21 @@ final class NodeDumper extends AbstractNodeVisitor
     #[\Override]
     public function visitCharLiteral(CharLiteralNode $node): string
     {
-        switch ($node->type) {
-            case CharLiteralType::Octal():
+        switch (true) {
+            case $node->type === CharLiteralType::Octal():
                 $type = 'Octal';
-
                 break;
-            case CharLiteralType::OctalLegacy():
+            case $node->type === CharLiteralType::OctalLegacy():
                 $type = 'OctalLegacy';
-
                 break;
-            case CharLiteralType::Unicode():
+            case $node->type === CharLiteralType::Unicode():
                 $type = 'Unicode';
-
                 break;
-            case CharLiteralType::UnicodeNamed():
+            case $node->type === CharLiteralType::UnicodeNamed():
                 $type = 'UnicodeNamed';
-
                 break;
+            default:
+                throw new \UnhandledMatchError('Unhandled match case of type '.\get_class($node->type));
         }
 
         return "{$type}({$node->originalRepresentation})";

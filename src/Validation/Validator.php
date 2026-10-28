@@ -15,10 +15,8 @@ namespace PHPRegex\Parser\Validation;
 
 use PHPRegex\Parser\AbstractNodeVisitor;
 use PHPRegex\Parser\Analysis\GroupIndex;
-use PHPRegex\Parser\Engine\LibraryPcre;
 use PHPRegex\Parser\Engine\PcreEngine;
 use PHPRegex\Parser\ErrorCode;
-use PHPRegex\Parser\Exception\InternalFailureException;
 use PHPRegex\Parser\Exception\SemanticErrorException;
 use PHPRegex\Parser\Node\AlternationNode;
 use PHPRegex\Parser\Node\AnchorNode;
@@ -44,7 +42,6 @@ use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
 use PHPRegex\Parser\Node\QuantifierNode;
-use PHPRegex\Parser\Node\QuantifierType;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\RegexNode;
 use PHPRegex\Parser\Node\ScriptRunNode;
@@ -55,37 +52,35 @@ use PHPRegex\Parser\Node\VersionConditionNode;
 use PHPRegex\Parser\PcreFeature;
 use PHPRegex\Parser\PcreTarget;
 use PHPRegex\Parser\PhpVersionGates;
-use PHPRegex\Parser\Printer\DisplayEscaper;
 use PHPRegex\Parser\RegexParser;
 use PHPRegex\Parser\Syntax\InlineFlags;
-use PHPRegex\Parser\Syntax\PcreNumber;
-use PHPRegex\Parser\Syntax\PcreVerb;
-use PHPRegex\Parser\Syntax\PosixItem;
-use PHPRegex\Parser\Syntax\RepeatCount;
 use PHPRegex\Parser\Syntax\StartOptions;
-use PHPRegex\Parser\Syntax\VersionCondition;
 use PHPRegex\Parser\Text\Ascii;
-use PHPRegex\Parser\Text\Bytes;
 
 /**
  * The semantic checks of a parsed pattern: what PCRE2 refuses in a tree the
  * parser could build, at the offset the release judged reports it.
  *
  * It walks the tree once, in the order PCRE2 reads the pattern, and keeps
- * the checks that need that walk: the nesting limit, verbs and the settings
- * of the opening run, repeat counts, the ranges and POSIX items of classes,
- * version conditions and callouts. PCRE2 refuses some things only once it
- * has read the whole pattern: a lookbehind it cannot measure, a reference to
- * a group the pattern does not have, a "\K" in a lookaround from PHP 8.5, a
- * conditional of more than two branches. The walk keeps the first error of
- * each of those passes and raises the earliest pass's once it ends, unless
- * an error read on the way, or a pattern too large to compile, stops PCRE2
- * before.
+ * what needs that walk: the nesting limit, where the walk stands (in a
+ * class, a lookaround, a repeat, the payload of a "(*pla:...)" parsed
+ * apart), and when an error found late is raised. PCRE2 refuses some
+ * things only once it has read the whole pattern: a lookbehind it cannot
+ * measure, a reference to a group the pattern does not have, a "\K" in a
+ * lookaround from PHP 8.5, a conditional of more than two branches. The
+ * walk keeps the first error of each of those passes and raises the
+ * earliest pass's once it ends, unless an error read on the way, or a
+ * pattern too large to compile, stops PCRE2 before.
  *
  * The checks that need no walk stand in classes of their own, which it
  * hands the text being read: EscapeChecks for one escape as written,
- * ReferenceChecks for what names a group, LookbehindChecks for the measure
- * of lookbehinds, CompiledSize for the 64 KiB limit.
+ * ReferenceChecks for what names a group, VerbChecks for a verb and the
+ * settings of the opening run, ClassChecks for the brackets and quotes of
+ * a class, RangeChecks for its ranges, QuantifierChecks for the count of a
+ * repeat, ConditionalChecks for the branches of a conditional and the
+ * version it compares with, CalloutChecks for the number of a callout,
+ * LookbehindChecks for the measure of lookbehinds, CompiledSize for the
+ * 64 KiB limit.
  *
  * Each walk starts from a clean state. FirstErrorLocator also asks it about
  * a class parsed alone, and about the part of a pattern read before a
@@ -98,20 +93,25 @@ use PHPRegex\Parser\Text\Bytes;
 final class Validator extends AbstractNodeVisitor
 {
     /**
+     * Whether PCRE reads the pattern as UTF-8, by the "u" flag or "(*UTF)".
+     */
+    private bool $unicodeMode = false;
+
+    /**
+     * Whether the node visited ends a range of a class.
+     */
+    private bool $endsRange = false;
+
+    /**
+     * The pattern body the tree was parsed from, for what no node records:
+     * whether a letter was escaped, and what follows an escape the lexer did
+     * not recognize. Null where positions do not point into it.
+     */
+    private ?string $source = null;
+    /**
      * How deep PCRE2 lets parentheses nest by default, which PHP keeps.
      */
     public const MAX_GROUP_NESTING = 250;
-
-    /**
-     * The longest (*MARK), (*PRUNE), (*SKIP) or (*THEN) name, in code units.
-     */
-    private const MAX_VERB_NAME_LENGTH = 255;
-
-    /**
-     * The largest (*LIMIT_...=n) value PCRE still multiplies by ten.
-     */
-    private const MAX_LIMIT_VALUE_BEFORE_DIGIT = 429496728;
-
     /**
      * The assertions an escaped letter stands for.
      */
@@ -121,129 +121,30 @@ final class Validator extends AbstractNodeVisitor
     ];
 
     /**
-     * The verbs PCRE2 reads anywhere in the pattern; the settings of the
-     * opening run are StartOptions::NAMES.
-     */
-    private const VALID_PCRE_VERBS = [
-        // Backtracking control verbs
-        'FAIL' => true, 'F' => true, 'ACCEPT' => true, 'COMMIT' => true,
-        'PRUNE' => true, 'SKIP' => true, 'THEN' => true,
-        // Definition verb
-        'DEFINE' => true,
-        // Mark verb (with optional :NAME argument)
-        'MARK' => true,
-        // Script run verbs (also as lowercase aliases)
-        'script_run' => true, 'sr' => true,
-        'atomic_script_run' => true, 'asr' => true,
-    ];
-
-    /**
-     * Start-of-pattern settings PCRE2 10.45 added: settings where the PCRE2
-     * judged is 10.45 or newer, unknown verbs on an older one, whether that
-     * is the library PHP runs with or the one a targeted PHP version bundles.
-     */
-    private const PCRE_1045_SETTINGS = ['CASELESS_RESTRICT' => true, 'TURKISH_CASING' => true];
-
-    /**
-     * The start-of-pattern settings that take a number: "(*LIMIT_MATCH=10)".
-     */
-    private const LIMIT_VERBS = [
-        'LIMIT_MATCH' => true, 'LIMIT_RECURSION' => true, 'LIMIT_DEPTH' => true, 'LIMIT_HEAP' => true,
-    ];
-
-    /**
-     * The names of POSIX classes PCRE2 knows, matched case-sensitively.
-     */
-    private const VALID_POSIX_CLASSES = [
-        'alnum' => true, 'alpha' => true, 'ascii' => true,
-        'blank' => true, 'cntrl' => true, 'digit' => true,
-        'graph' => true, 'lower' => true, 'print' => true,
-        'punct' => true, 'space' => true, 'upper' => true,
-        'word' => true, 'xdigit' => true,
-    ];
-
-    /**
-     *
-     * @var int
-     */
-    private $maxLookbehindLength = RegexParser::DEFAULT_MAX_LOOKBEHIND_LENGTH;
-
-    /**
-     *
-     * @var string|null
-     */
-    private $pattern;
-
-    /**
-     * @var PcreEngine
-     *
-     */
-    private $engine;
-
-    /**
-     * Whether PCRE reads the pattern as UTF-8, by the "u" flag or "(*UTF)".
-     *
-     * @var bool
-     */
-    private $unicodeMode = false;
-
-    /**
-     * Whether the node visited ends a range of a class.
-     *
-     * @var bool
-     */
-    private $endsRange = false;
-
-    /**
-     * The pattern body the tree was parsed from, for what no node records:
-     * whether a letter was escaped, and what follows an escape the lexer did
-     * not recognize. Null where positions do not point into it.
-     *
-     * @var string|null
-     */
-    private $source;
-
-    /**
      * How many classes the node visited sits in: an extended class holds
      * others.
-     *
-     * @var int
      */
-    private $charClassDepth = 0;
+    private int $charClassDepth = 0;
 
     /**
      * Whether a "\Q" written in the class being read is still open before
      * the item at hand.
-     *
-     * @var bool
      */
-    private $classQuoteOpen = false;
-
-    /**
-     * Where the run of start-of-pattern settings ends in the source, or null
-     * when there is no source to read it from.
-     *
-     * @var int|null
-     */
-    private $startOfPatternEnd;
+    private bool $classQuoteOpen = false;
 
     /**
      * Whether the walk judges the part of a pattern read before a syntax
      * error: every error a lookbehind's measure finds waits for the whole
      * pattern to be read, so there lookbehinds are not measured.
-     *
-     * @var bool
      */
-    private $readingPrefix = false;
+    private bool $readingPrefix = false;
 
     /**
      * Where the text the visited nodes count their positions from starts in
      * the whole pattern: 0, or the start of the payload of the "(*pla:...)"
      * or "(*sr:...)" being visited, which is parsed apart.
-     *
-     * @var int
      */
-    private $positionOffset = 0;
+    private int $positionOffset = 0;
 
     /**
      * For each lookaround the node being visited sits in, innermost last,
@@ -251,38 +152,30 @@ final class Validator extends AbstractNodeVisitor
      *
      * @var list<int|null>
      */
-    private $keepsInLookarounds = [];
+    private array $keepsInLookarounds = [];
 
     /**
      * How many repeated items the node being visited sits in.
-     *
-     * @var int
      */
-    private $repeatDepth = 0;
+    private int $repeatDepth = 0;
 
     /**
      * How many lookbehinds the node being visited sits in.
-     *
-     * @var int
      */
-    private $lookbehindDepth = 0;
+    private int $lookbehindDepth = 0;
 
     /**
      * How many lookaheads inside a lookbehind the walk is in: before PCRE2
      * 10.34, PCRE never measures a lookbehind there.
-     *
-     * @var int
      */
-    private $lookaheadsInLookbehinds = 0;
+    private int $lookaheadsInLookbehinds = 0;
 
     /**
      * Whether PCRE fails on an operator of an extended class its walk over
      * the lookbehinds meets: PCRE2 10.45 to 10.47, in a pattern that holds
      * a lookbehind.
-     *
-     * @var bool
      */
-    private $classOperatorsFail = false;
+    private bool $classOperatorsFail = false;
 
     /**
      * The lookarounds and substring scans the walk is in, innermost last:
@@ -290,42 +183,34 @@ final class Validator extends AbstractNodeVisitor
      *
      * @var list<bool>
      */
-    private $lookaroundKinds = [];
+    private array $lookaroundKinds = [];
 
     /**
      * @var list<GroupNode> the lookbehinds around the node visited, innermost last
      */
-    private $lookbehinds = [];
+    private array $lookbehinds = [];
 
     /**
      * How many groups, conditionals and script runs enclose the node.
-     *
-     * @var int
      */
-    private $nestingDepth = 0;
+    private int $nestingDepth = 0;
 
     /**
      * Whether the walk started from the pattern root, and so ends where the
      * errors PCRE finds late can be reported.
-     *
-     * @var bool
      */
-    private $walkingPattern = false;
+    private bool $walkingPattern = false;
 
     /**
      * The length of the pattern body being walked.
-     *
-     * @var int
      */
-    private $patternLength = 0;
+    private int $patternLength = 0;
 
     /**
      * Whether a lookbehind is being measured: a missing group ends the
      * measure there, as it ends PCRE's.
-     *
-     * @var bool
      */
-    private $measuringLookbehind = false;
+    private bool $measuringLookbehind = false;
 
     /**
      * The first error of each late pass, kept until the walk ends: [0] the
@@ -336,52 +221,79 @@ final class Validator extends AbstractNodeVisitor
      *
      * @var array<int, SemanticErrorException>
      */
-    private $lateErrors = [];
+    private array $lateErrors = [];
 
     /**
      * Where the first pass of the compiler meets the error kept for it in
      * $lateErrors[1]: the earliest of them is the one it reports, unless the
      * pattern passes the size limit before it.
-     *
-     * @var int
      */
-    private $firstPassErrorAt = \PHP_INT_MAX;
+    private int $firstPassErrorAt = \PHP_INT_MAX;
 
     /**
      * Where the reference, the call, the conditional or the scan being
      * checked starts: where the first pass meets a group it names, whatever
      * offset reports it.
-     *
-     * @var int
      */
-    private $referenceAt = 0;
+    private int $referenceAt = 0;
 
     /**
-     *
-     * @var \PHPRegex\Parser\PcreTarget
      */
-    private $target;
+    private PcreTarget $target;
 
     /**
      * The checks of the escapes of the text being read.
-     *
-     * @var \PHPRegex\Parser\Validation\EscapeChecks
      */
-    private $escapes;
+    private EscapeChecks $escapes;
 
     /**
      * The checks of the references of the text being read.
-     *
-     * @var \PHPRegex\Parser\Validation\ReferenceChecks
      */
-    private $references;
+    private ReferenceChecks $references;
+
+    /**
+     * The checks of the verbs and settings of the text being read.
+     */
+    private VerbChecks $verbs;
+
+    /**
+     * The checks of the brackets of the classes of the text being read.
+     */
+    private ClassChecks $classes;
+
+    /**
+     * The checks of the ranges of the classes of the text being read.
+     */
+    private RangeChecks $ranges;
+
+    /**
+     * The checks of the conditionals of the text being read.
+     */
+    private ConditionalChecks $conditionals;
+
+    /**
+     * The checks of the counts of the repeats of the text being read.
+     */
+    private QuantifierChecks $quantifiers;
+
+    /**
+     * The check of the callouts of the text being read.
+     */
+    private CalloutChecks $callouts;
 
     /**
      * The measure of the lookbehinds of the pattern.
-     *
-     * @var \PHPRegex\Parser\Validation\LookbehindChecks
      */
-    private $lookbehindChecks;
+    private LookbehindChecks $lookbehindChecks;
+    /**
+     */
+    private int $maxLookbehindLength = RegexParser::DEFAULT_MAX_LOOKBEHIND_LENGTH;
+    /**
+     */
+    private ?string $pattern = null;
+    /**
+     */
+    private PcreEngine $engine;
 
     /**
      * @param PcreTarget|null $target the PHP and PCRE2 judged; the running ones when null
@@ -401,6 +313,12 @@ final class Validator extends AbstractNodeVisitor
         $groups = GroupIndex::empty();
         $this->escapes = new EscapeChecks($this->target, $pattern, null, 0, false, false, false, $engine);
         $this->references = new ReferenceChecks($groups, $groups->numbering(), $this->target, \Closure::fromCallable([$this, 'keepMissingReference']), $pattern);
+        $this->verbs = new VerbChecks($this->target, $pattern);
+        $this->classes = new ClassChecks($this->target, $pattern);
+        $this->ranges = new RangeChecks($this->target, $pattern);
+        $this->conditionals = new ConditionalChecks($this->target, \Closure::fromCallable([$this, 'keepBranchCountError']), $pattern);
+        $this->quantifiers = new QuantifierChecks($this->target, $pattern);
+        $this->callouts = new CalloutChecks($pattern);
         $this->lookbehindChecks = new LookbehindChecks($groups, $this->target, \Closure::fromCallable([$this, 'checkMeasuredReference']), $pattern, $maxLookbehindLength, false);
     }
 
@@ -515,16 +433,14 @@ final class Validator extends AbstractNodeVisitor
 
         $source = $this->source;
         $positionOffset = $this->positionOffset;
-        $escapes = $this->escapes;
-        $references = $this->references;
-        if ($node->child->getStartPosition() <= $node->startPosition) {
+        $readApart = $node->child->getStartPosition() <= $node->startPosition;
+        if ($readApart) {
             $this->enterPayload($node->startPosition, $node->endPosition);
-            $this->escapes = $this->escapes->reading($this->source, $this->positionOffset);
-            $this->references = $this->references->reading($this->source, $this->positionOffset);
+            $this->readText();
         }
 
         if ($isLookbehind) {
-            $this->lookbehindDepth++;
+            ++$this->lookbehindDepth;
             $this->lookbehinds[] = $node;
         }
 
@@ -535,7 +451,7 @@ final class Validator extends AbstractNodeVisitor
 
         $lookaheadInLookbehind = $isLookaround && !$isLookbehind && $this->lookbehindDepth > 0;
         if ($lookaheadInLookbehind) {
-            $this->lookaheadsInLookbehinds++;
+            ++$this->lookaheadsInLookbehinds;
         }
 
         $walkedApart = $isLookaround || GroupType::ScanSubstring() === $node->type;
@@ -554,17 +470,18 @@ final class Validator extends AbstractNodeVisitor
         } finally {
             $this->source = $source;
             $this->positionOffset = $positionOffset;
-            $this->escapes = $escapes;
-            $this->references = $references;
+            if ($readApart) {
+                $this->readText();
+            }
             if ($nests) {
-                $this->nestingDepth--;
+                --$this->nestingDepth;
             }
             if ($isLookbehind) {
-                $this->lookbehindDepth--;
+                --$this->lookbehindDepth;
                 array_pop($this->lookbehinds);
             }
             if ($lookaheadInLookbehind) {
-                $this->lookaheadsInLookbehinds--;
+                --$this->lookaheadsInLookbehinds;
             }
             if ($walkedApart) {
                 array_pop($this->lookaroundKinds);
@@ -597,71 +514,26 @@ final class Validator extends AbstractNodeVisitor
         try {
             $node->content->accept($this);
         } finally {
-            $this->nestingDepth--;
+            --$this->nestingDepth;
         }
     }
 
     #[\Override]
     public function visitQuantifier(QuantifierNode $node): void
     {
-        // "\N{4 }", "\N{,2}": before PCRE2 10.43 such a count does not repeat
-        // "\N", and "\N{" that is no repeat is refused where the "\N" ends.
-        // "a{ 4 }" and "a{,2}" are literal text there, which the lexer reads
-        // as such.
-        if ($node->node instanceof CharTypeNode && 'N' === $node->node->value && 0 === $this->charClassDepth
-            && 0 === strncmp($node->quantifier, '{', strlen('{'))
-            && 1 !== LibraryPcre::match('/^\{\d++(?:,\d*+)?\}/', $node->quantifier)
-            && !$this->supports(PcreFeature::OpenAndPaddedRepeatCounts())) {
-            // Before 10.37 its digits are read first: one past 65535 is
-            // refused as too big a count, at the same place.
-            if (!$this->supports(PcreFeature::LargeOpenCountIsText()) && null !== RepeatCount::overflowBeforeTen37($node->quantifier, 0)) {
-                $this->raiseSemanticError('Number too big in the count after \N: PCRE allows at most 65535 repetitions.', $node->node->getEndPosition(), ErrorCode::QuantifierTooBig());
-            }
-
-            $this->raiseSemanticError(
-                \sprintf('The count "%s" after \N needs PCRE2 10.43, which PHP bundles from 8.4.', $node->quantifier),
-                $node->node->getEndPosition(),
-                ErrorCode::EscapeUnsupported(),
-                'Write the count as {n}, {n,} or {n,m} without spaces, or target PHP 8.4+.',
-            );
-        }
+        $this->quantifiers->countAfterN($node, $this->charClassDepth > 0);
 
         // PCRE reads the item before its count: what it refuses there comes
         // first, and what it checks once the pattern is read waits.
-        $this->repeatDepth++;
+        ++$this->repeatDepth;
 
         try {
             $node->node->accept($this);
         } finally {
-            $this->repeatDepth--;
+            --$this->repeatDepth;
         }
 
-        [$min, $max] = QuantifierCounts::of($node->quantifier);
-
-        // PCRE caps repetition counts at 65535, and checks each number as
-        // it reads it, before it compares the two.
-        [$minEnd, $maxEnd] = $this->quantifierNumberEnds($node);
-
-        // Right after "\N", PCRE reads the count to tell it from a character
-        // name, and refuses it where the "\N" ends.
-        $afterN = $node->node instanceof CharTypeNode && 'N' === $node->node->value && null !== $this->source
-            && '{' === ($this->source[$node->node->getEndPosition()] ?? '') ? $node->node->getEndPosition() : null;
-        if ($min > PcreNumber::MAX || $max > PcreNumber::MAX) {
-            $this->raiseSemanticError(
-                \sprintf('Number too big in "%s" quantifier: PCRE allows at most 65535 repetitions.', $node->quantifier),
-                $afterN ?? ($min > PcreNumber::MAX ? $minEnd : $maxEnd),
-                ErrorCode::QuantifierTooBig(),
-            );
-        }
-
-        if (-1 !== $max && $min > $max) {
-            $this->raiseSemanticError(
-                \sprintf('Invalid quantifier range "%s": min > max.', $node->quantifier),
-                $afterN ?? $maxEnd,
-                ErrorCode::QuantifierInvalidRange(),
-                \sprintf('Write the smaller count first: "{%d,%d}".', $max, $min),
-            );
-        }
+        $this->quantifiers->counts($node);
     }
 
     #[\Override]
@@ -671,8 +543,8 @@ final class Validator extends AbstractNodeVisitor
             return;
         }
 
-        if ($this->charClassDepth > 0 && '[' === $node->value && $this->isUnquotedClassBracket($this->source, $node)) {
-            $this->validateBracketInClass($this->source, $node->startPosition);
+        if ($this->charClassDepth > 0 && '[' === $node->value && $this->classes->isUnquotedBracket($node, $this->classQuoteOpen)) {
+            $this->classes->bracket($node->startPosition);
 
             return;
         }
@@ -743,22 +615,15 @@ final class Validator extends AbstractNodeVisitor
         // of every lookbehind or in a lookahead there, fails at offset 0.
         // An operator, anywhere in the class, is the root of its expression.
         if ($this->walkingPattern && $this->classOperatorsFail && true !== end($this->lookaroundKinds) && $node->expression instanceof ClassSetOperationNode) {
-            $this->lateErrors[0] ??= new SemanticErrorException(
-                'An operator of an extended class in a pattern that holds a lookbehind makes PCRE2 10.45 to 10.47 fail ("unknown meta code in check_lookbehinds()").',
-                ErrorCode::ExtendedClassBesideLookbehind(),
-                0,
-                $this->pattern,
-                null,
-                'Target PCRE2 10.48 or later, or write the class without an operator, as "[...]".',
-            );
+            $this->lateErrors[0] ??= new SemanticErrorException('An operator of an extended class in a pattern that holds a lookbehind makes PCRE2 10.45 to 10.47 fail ("unknown meta code in check_lookbehinds()").', ErrorCode::ExtendedClassBesideLookbehind(), 0, $this->pattern, null, null, 'Target PCRE2 10.48 or later, or write the class without an operator, as "[...]".');
         }
 
-        $this->charClassDepth++;
+        ++$this->charClassDepth;
 
         try {
             $node->expression->accept($this);
         } finally {
-            $this->charClassDepth--;
+            --$this->charClassDepth;
         }
     }
 
@@ -772,33 +637,29 @@ final class Validator extends AbstractNodeVisitor
     #[\Override]
     public function visitCharClass(CharClassNode $node): void
     {
-        if (0 === $this->charClassDepth && null !== $this->source) {
-            $start = $node->startPosition;
-
-            // "[[:<:]]" and "[[:>:]]" are the old POSIX word boundaries,
-            // which PCRE reads as such outside a class.
-            if (\in_array(substr($this->source, $start, 7), ['[[:<:]]', '[[:>:]]'], true)) {
+        if (0 === $this->charClassDepth) {
+            if ($this->classes->isWordBoundary($node->startPosition)) {
                 return;
             }
 
-            $this->validatePosixOutsideClass($this->source, $start);
+            $this->classes->posixOutsideClass($node->startPosition);
         }
 
         $parts = $node->expression instanceof AlternationNode ? $node->expression->alternatives : [$node->expression];
 
         $quoteOpen = $this->classQuoteOpen;
         $this->classQuoteOpen = false;
-        $this->charClassDepth++;
+        ++$this->charClassDepth;
 
         try {
             $end = $node->startPosition;
             foreach ($parts as $part) {
-                $this->readClassQuotes($end, $part->getStartPosition());
+                $this->classQuoteOpen = $this->classes->quoteOpenAfter($end, $part->getStartPosition(), $this->classQuoteOpen);
                 $part->accept($this);
                 $end = $part->getEndPosition();
             }
         } finally {
-            $this->charClassDepth--;
+            --$this->charClassDepth;
             $this->classQuoteOpen = $quoteOpen;
         }
     }
@@ -806,45 +667,14 @@ final class Validator extends AbstractNodeVisitor
     #[\Override]
     public function visitRange(RangeNode $node): void
     {
-        // 1. Validation: Ensure start and end nodes represent a single character.
-        // We allow LiteralNode, but also CharLiteralNode and friends.
-        // Unreachable from a parsed pattern: the parser refuses such an
-        // endpoint first, with the same code; only a hand-built range gets here.
-        if (!$this->isSingleCharNode($node->start) || !$this->isSingleCharNode($node->end)) {
-            $this->raiseSemanticError(
-                \sprintf(
-                    'Invalid range: ranges must be between literal characters or single escape sequences. Found %s and %s.',
-                    get_class($node->start),
-                    get_class($node->end),
-                ),
-                $node->startPosition,
-                ErrorCode::RangeInvalidBounds(),
-            );
-        }
-
-        // 2. Validation: Ensure characters are single codepoint (for LiteralNodes).
-        // Use mb_strlen for proper Unicode character counting.
-        if ($node->start instanceof LiteralNode && mb_strlen($node->start->value, 'UTF-8') > 1) {
-            $this->raiseSemanticError(
-                'Invalid range: start char must be a single character.',
-                $node->startPosition,
-                ErrorCode::RangeInvalidStart(),
-            );
-        }
-        if ($node->end instanceof LiteralNode && mb_strlen($node->end->value, 'UTF-8') > 1) {
-            $this->raiseSemanticError(
-                'Invalid range: end char must be a single character.',
-                $node->startPosition,
-                ErrorCode::RangeInvalidEnd(),
-            );
-        }
+        $this->ranges->endpoints($node);
 
         $node->start->accept($this);
-        $this->readClassQuotes($node->start->getEndPosition(), $node->end->getStartPosition());
+        $this->classQuoteOpen = $this->classes->quoteOpenAfter($node->start->getEndPosition(), $node->end->getStartPosition(), $this->classQuoteOpen);
 
         // "[a-[.x.]]": a collating element is no range end.
-        if (null !== $this->source && $node->end instanceof LiteralNode && '[' === $node->end->value && $this->isUnquotedClassBracket($this->source, $node->end)) {
-            $this->validateBracketInClass($this->source, $node->end->startPosition, true);
+        if ($node->end instanceof LiteralNode && '[' === $node->end->value && $this->classes->isUnquotedBracket($node->end, $this->classQuoteOpen)) {
+            $this->classes->bracket($node->end->startPosition, true);
         }
 
         $this->endsRange = true;
@@ -855,20 +685,7 @@ final class Validator extends AbstractNodeVisitor
             $this->endsRange = false;
         }
 
-        // 3. Validation: order check, on the code points of both endpoints.
-        // PCRE reports it where the range ends.
-        $startCodePoint = $this->rangeEndpointCodePoint($node->start, true);
-        $endCodePoint = $this->rangeEndpointCodePoint($node->end, false);
-        if (null !== $startCodePoint && null !== $endCodePoint && $startCodePoint > $endCodePoint) {
-            // Without Unicode mode, a multibyte end ends the range on its
-            // first byte.
-            $endsAt = !$this->unicodeMode && $node->end instanceof LiteralNode ? $node->getEndPosition() - \strlen($node->end->value) + 1 : $node->getEndPosition();
-            $this->raiseSemanticError(
-                \sprintf('Invalid range "%s": start character comes after end character.', $this->describeRange($node)),
-                $this->target->faultOffset($endsAt),
-                ErrorCode::RangeReversed(),
-            );
-        }
+        $this->ranges->order($node);
     }
 
     #[\Override]
@@ -905,15 +722,7 @@ final class Validator extends AbstractNodeVisitor
     #[\Override]
     public function visitPosixClass(PosixClassNode $node): void
     {
-        // PCRE matches the name case-sensitively: "[[:ALPHA:]]" is unknown.
-        if (!$this->isPosixClassName($node->class)) {
-            // Past the class from PCRE2 10.45, on its name before.
-            $this->raiseSemanticError(
-                \sprintf('Invalid POSIX class: "%s".', $node->class),
-                $this->supports(PcreFeature::PosixItemErrorPastItsEnd()) ? $node->getEndPosition() : $node->startPosition + 2 + (0 === strncmp($node->class, '^', strlen('^')) ? 1 : 0),
-                ErrorCode::PosixInvalid(),
-            );
-        }
+        $this->classes->posixClass($node);
     }
 
     #[\Override]
@@ -973,22 +782,13 @@ final class Validator extends AbstractNodeVisitor
             );
         }
 
-        // The parser keeps every branch after the first in "no"; PCRE takes
-        // two at most.
-        if ($node->no instanceof AlternationNode) {
-            $this->raiseBranchCountError(
-                'A conditional group holds more than two branches.',
-                $this->branchCountErrorOffset($node),
-                ErrorCode::ConditionalTooManyBranches(),
-                'Group the extra branches: (?(1)a|(?:b|c)).',
-            );
-        }
+        $this->conditionals->branches($node);
 
         $node->yes->accept($this);
         $node->no->accept($this);
 
         // When an error stops the walk, visitRegex() resets the count.
-        $this->nestingDepth--;
+        --$this->nestingDepth;
     }
 
     #[\Override]
@@ -1001,213 +801,39 @@ final class Validator extends AbstractNodeVisitor
     #[\Override]
     public function visitPcreVerb(PcreVerbNode $node): void
     {
-        $verbName = LibraryPcre::split('/[:=]/', $node->verb, 2)[0] ?? $node->verb;
-
-        $setting = isset(StartOptions::NAMES[$verbName]);
-        // A script run takes a body: its name closed with no colon is an
-        // alphabetic name PCRE does not know.
-        $known = isset(self::VALID_PCRE_VERBS[$verbName])
-            && (1 !== LibraryPcre::match('/^[a-z]/', $verbName) || '' !== substr($node->verb, \strlen($verbName), 1));
-        if (!$known
-            && !($setting && (!isset(self::PCRE_1045_SETTINGS[$verbName]) || $this->supports(PcreFeature::CasingSettingVerbs())))) {
-            // "(*)" is a "*" with nothing to repeat, refused past it from
-            // PCRE2 10.47.
-            if ('' === $node->verb) {
-                $this->raiseSemanticError(
-                    'Quantifier "*" does not follow a repeatable item: "(*)" names no verb.',
-                    $this->target->faultOffset($node->startPosition + 2),
-                    ErrorCode::QuantifierNothingToRepeat(),
-                );
-            }
-
-            // PCRE reports an unknown verb where its name ends, and past the
-            // character after it, whole in UTF mode, an alphabetic assertion,
-            // whose name starts with a lowercase letter, followed by no colon.
-            $nameEnd = $node->startPosition + 2 + (1 === LibraryPcre::match('/^\w*+/', $verbName, $name) ? \strlen($name[0]) : 0);
-            $width = $this->unicodeMode && 1 === LibraryPcre::match('/\G./su', (string) $this->source, $character, 0, $nameEnd) ? \strlen($character[0]) : 1;
-            $this->raiseSemanticError(
-                \sprintf('Invalid or unsupported PCRE verb: "%s".', $verbName),
-                (function () use ($verbName, $nameEnd, $width) {
-                    switch (true) {
-                        case 1 === LibraryPcre::match('/^[a-z]/', $verbName) && ':' !== ($this->source[$nameEnd] ?? ''):
-                            return $this->target->faultOffset($nameEnd + $width, $width);
-                        default:
-                            return $nameEnd;
-                    }
-                })(),
-                ErrorCode::VerbInvalid(),
-            );
-        }
-
-        // PCRE reports these at the closing parenthesis.
-        $closing = $node->getEndPosition() - 1;
-
-        if ($setting) {
-            $this->validateStartOfPatternPlacement($verbName, $node->startPosition);
-        }
-
-        // Only the limits take a value after "=": after any other name PCRE
-        // refuses the "=" where it stands. "(*=name)", a mark written short,
-        // is refused further down.
-        $equals = $node->startPosition + 2 + \strlen($verbName);
-        if (!isset(self::LIMIT_VERBS[$verbName]) && '=' === ($this->source[$equals] ?? '') && '=' !== ($this->source[$node->startPosition + 2] ?? '')) {
-            $this->raiseSemanticError(
-                \sprintf('(*%s) takes no value: only the limits take one, as (*LIMIT_MATCH=10).', $verbName),
-                1 === LibraryPcre::match('/^[a-z]/', $verbName) ? $this->target->faultOffset($equals + 1) : $equals,
-                ErrorCode::VerbInvalid(),
-            );
-        }
-
-        if (isset(self::LIMIT_VERBS[$verbName]) && 1 !== LibraryPcre::match('/\A[A-Z_]++=\d++\z/', $node->verb)) {
-            $this->raiseSemanticError(
-                \sprintf('(*%s) needs a number: (*%s=10).', $verbName, $verbName),
-                PcreVerb::limitValueErrorOffset((string) $this->source, $node->startPosition, $this->supports(PcreFeature::LimitValueErrorOnFaultingCharacter())) ?? $closing,
-                ErrorCode::VerbInvalid(),
-            );
-        }
-
-        // A verb name holds at most 255 code units.
-        if (1 === LibraryPcre::match('/^[A-Z]*+:(.*)$/s', $node->verb, $name) && \strlen($name[1]) > self::MAX_VERB_NAME_LENGTH) {
-            $this->raiseSemanticError(
-                \sprintf('The name of (*%s) is too long: PCRE takes at most %d code units.', $verbName, self::MAX_VERB_NAME_LENGTH),
-                $closing,
-                ErrorCode::VerbNameTooLong(),
-            );
-        }
-
-        if (isset(self::LIMIT_VERBS[$verbName]) && 1 === LibraryPcre::match('/=(\d++)\z/', $node->verb, $digits, \PREG_OFFSET_CAPTURE)) {
-            $this->validateLimitValue($digits[1][0], $node->startPosition + 2 + $digits[1][1]);
-        }
-
-        // "(*=name)" is read as a mark shorthand, but PCRE only knows "(*:".
-        if (0 === strncmp($node->verb, 'MARK=', strlen('MARK='))) {
-            $this->raiseSemanticError(
-                '(*=...) is not a PCRE verb; a mark is written (*MARK:name) or (*:name).',
-                $node->startPosition + 2,
-                ErrorCode::VerbInvalid(),
-            );
-        }
-
-        if ('MARK' === $verbName && 1 !== LibraryPcre::match('/^MARK:./s', $node->verb)) {
-            $this->raiseSemanticError(
-                '(*MARK) must have a name: (*MARK:name) or (*:name).',
-                $closing,
-                ErrorCode::VerbMarkNameMissing(),
-            );
-        }
+        $this->verbs->verb($node);
     }
 
     #[\Override]
     public function visitDefine(DefineNode $node): void
     {
-        // PCRE reports it at the "DEFINE" word, past "(?(".
-        if ($node->content instanceof AlternationNode) {
-            $this->raiseBranchCountError(
-                'A (DEFINE) group holds more than one branch.',
-                $node->startPosition + 3,
-                ErrorCode::DefineTooManyBranches(),
-                'Group the branches: (?(DEFINE)(?:a|b)).',
-            );
-        }
+        $this->conditionals->defineBranches($node);
 
         $this->enterNesting($node->content->getStartPosition());
 
         try {
             $node->content->accept($this);
         } finally {
-            $this->nestingDepth--;
+            --$this->nestingDepth;
         }
     }
 
     #[\Override]
     public function visitLimitMatch(LimitMatchNode $node): void
     {
-        $this->validateStartOfPatternPlacement('LIMIT_MATCH', $node->startPosition);
-
-        // The digits as written, leading zeros included.
-        $written = null === $this->source ? '' : (string) substr($this->source, $node->startPosition, $node->getEndPosition() - $node->startPosition);
-        if (1 === LibraryPcre::match('/=(\d++)\)$/', $written, $digits, \PREG_OFFSET_CAPTURE)) {
-            $this->validateLimitValue($digits[1][0], $node->startPosition + $digits[1][1]);
-        }
+        $this->verbs->limitMatch($node);
     }
 
-    /**
-     * PCRE compares the version two ways and no more.
-     *
-     * The parser reads the others so that a pattern using one still produces
-     * a tree to look at; saying they will not compile is this visitor's job.
-     */
     #[\Override]
     public function visitVersionCondition(VersionConditionNode $node): void
     {
-        $versionAt = null === $this->source ? false : strpos($this->source, 'VERSION', $node->startPosition);
-        $pcreOffset = false === $versionAt ? null : VersionCondition::errorOffsetFor((string) $this->source, $versionAt, $this->target, $this->unicodeMode);
-
-        if (!\in_array($node->operator, ['=', '>='], true)) {
-            $this->raiseSemanticError(
-                \sprintf('Version condition "%s" is not supported: PCRE compares with "=" or ">=".', $node->operator),
-                $pcreOffset ?? $node->startPosition,
-                ErrorCode::ConditionalVersionOperator(),
-            );
-        }
-
-        // PCRE reads a major number and at most one ".minor".
-        if (1 === LibraryPcre::match('/^\d++(?:\.\d++)?$/', $node->version, $matches)) {
-            $tooBig = false === $versionAt ? null : VersionCondition::errorOffsetFor((string) $this->source, $versionAt, $this->target, $this->unicodeMode);
-
-            // "(?(VERSION=10 )": before PCRE2 10.47, what follows the major
-            // where the ")" belongs leaves the condition open.
-            if (null !== $tooBig && false !== $versionAt && !$this->supports(PcreFeature::VersionConditionLeftOpenIsVersionError())
-                && VersionCondition::isMajorLeftOpenAt((string) $this->source, $versionAt, $tooBig)) {
-                $this->raiseSemanticError(
-                    \sprintf('Missing ")" to close the condition at position %d.', $tooBig),
-                    $tooBig,
-                    ErrorCode::ConditionalUnclosed(),
-                );
-            }
-
-            if (null !== $tooBig) {
-                $this->raiseSemanticError(
-                    \sprintf('Invalid version "%s" in a version condition: the number is too big.', $node->version),
-                    $tooBig,
-                    ErrorCode::ConditionalVersionSyntax(),
-                    'PCRE takes a major and a minor of at most 1000, and before PCRE2 10.47 a minor of two digits.',
-                );
-            }
-
-            return;
-        }
-
-        // The pattern matches every string, the empty prefix included: the
-        // '' branch is unreachable and only there for the type.
-        $valid = 1 === LibraryPcre::match('/^\d*+(?:\.\d*+)?/', $node->version, $matches) ? $matches[0] : '';
-        $afterNumber = '' !== $valid && 0 !== substr_compare($valid, '.', -strlen('.'));
-        $versionStart = null === $this->source
-            ? $node->startPosition
-            : (int) strpos($this->source, $node->version, $node->startPosition);
-
-        $this->raiseSemanticError(
-            \sprintf('Invalid version "%s" in a version condition: PCRE takes a major number and an optional ".minor".', $node->version),
-            // From PCRE2 10.47, PCRE steps past a character it reads where
-            // ")" belongs; it stops on one it reads where a digit belongs.
-            // Before, it stops on a third digit of a minor.
-            $pcreOffset ?? ($afterNumber ? $this->target->faultOffset($versionStart + \strlen($valid) + 1) : $versionStart + \strlen($valid)),
-            ErrorCode::ConditionalVersionSyntax(),
-        );
+        $this->conditionals->versionCondition($node);
     }
 
     #[\Override]
     public function visitCallout(CalloutNode $node): void
     {
-        // Any string is a valid argument, the empty one included: PCRE2
-        // compiles (?C""), (?C'') and (?C{}). A number goes up to 255.
-        if (\is_int($node->identifier) && ($node->identifier < 0 || $node->identifier > 255)) {
-            $this->raiseSemanticError(
-                \sprintf('Callout identifier must be between 0 and 255, got %d.', $node->identifier),
-                $this->calloutOverflowOffset($node),
-                ErrorCode::CalloutOutOfRange(),
-            );
-        }
+        $this->callouts->callout($node);
     }
 
     /**
@@ -1256,7 +882,6 @@ final class Validator extends AbstractNodeVisitor
         $this->source = $node->source;
         $this->charClassDepth = 0;
         $this->classQuoteOpen = false;
-        $this->startOfPatternEnd = null === $node->source ? null : $this->readStartOfPatternEnd($node->source);
         $this->readingPrefix = $readingPrefix;
         $this->positionOffset = 0;
         $this->keepsInLookarounds = [];
@@ -1287,10 +912,16 @@ final class Validator extends AbstractNodeVisitor
         );
         $groups = GroupIndex::of($node->pattern);
         $this->references = new ReferenceChecks($groups, $groups->numbering(), $this->target, \Closure::fromCallable([$this, 'keepMissingReference']), $this->pattern, $node->source, 0, $this->unicodeMode);
+        $this->verbs = VerbChecks::forPattern($this->target, $this->pattern, $node->source, $this->unicodeMode);
+        $this->classes = new ClassChecks($this->target, $this->pattern, $node->source);
+        $this->ranges = new RangeChecks($this->target, $this->pattern, $node->source, 0, $this->unicodeMode);
+        $this->conditionals = new ConditionalChecks($this->target, \Closure::fromCallable([$this, 'keepBranchCountError']), $this->pattern, $node->source, 0, $this->unicodeMode);
+        $this->quantifiers = new QuantifierChecks($this->target, $this->pattern, $node->source);
+        $this->callouts = new CalloutChecks($this->pattern, $node->source);
         // A measure of its own: what an earlier pattern measured is gone.
         $this->lookbehindChecks = new LookbehindChecks($groups, $this->target, \Closure::fromCallable([$this, 'checkMeasuredReference']), $this->pattern, $this->maxLookbehindLength, $this->unicodeMode);
 
-        $this->validateCasingSettings($node);
+        $this->verbs->casingSettings($node->flags);
 
         $this->walkingPattern = true;
 
@@ -1312,10 +943,10 @@ final class Validator extends AbstractNodeVisitor
             return;
         }
 
-        $this->nestingDepth--;
+        --$this->nestingDepth;
         $source = $this->source ?? '';
         while ($bodyStart > 0 && isset($source[$bodyStart - 1]) && Ascii::isSpace($source[$bodyStart - 1])) {
-            $bodyStart--;
+            --$bodyStart;
         }
 
         $this->raiseSemanticError(
@@ -1324,105 +955,6 @@ final class Validator extends AbstractNodeVisitor
             ErrorCode::GroupNestedTooDeep(),
             'Flatten the pattern: drop groups that only wrap one item.',
         );
-    }
-
-    /**
-     * PCRE reads a (*LIMIT_...=n) value digit by digit and refuses the digit
-     * that would take it past 4294967289, where it stops.
-     */
-    private function validateLimitValue(string $digits, int $start): void
-    {
-        $value = 0;
-        foreach (Bytes::split($digits) as $index => $digit) {
-            if ($value > self::MAX_LIMIT_VALUE_BEFORE_DIGIT) {
-                $this->raiseSemanticError(
-                    \sprintf('The value %s is too large for a (*LIMIT_...) setting: PCRE takes at most 4294967289.', $digits),
-                    // Before PCRE2 10.45, past the digit it refuses.
-                    $start + $index + ($this->supports(PcreFeature::LimitValueErrorOnFaultingCharacter()) ? 0 : 1),
-                    ErrorCode::VerbLimitTooLarge(),
-                );
-            }
-
-            $value = $value * 10 + (int) $digit;
-        }
-    }
-
-    /**
-     * PCRE reads the number of a callout digit by digit, and stops past the
-     * one that takes it over 255.
-     */
-    private function calloutOverflowOffset(CalloutNode $node): int
-    {
-        $digits = null !== $this->source && 1 === LibraryPcre::match('/\G\d++/', $this->source, $matches, 0, $node->startPosition + 3)
-            ? $matches[0]
-            : (string) $node->identifier; // Unreachable from a parsed pattern: only a hand-built callout has no source.
-
-        $number = 0;
-        foreach (Bytes::split($digits) as $index => $digit) {
-            $number = $number * 10 + (int) $digit;
-            if ($number > 255) {
-                return $node->startPosition + 4 + $index;
-            }
-        }
-
-        return $node->startPosition + 4; // Unreachable from a parsed pattern, whose number is over 255 here.
-    }
-
-    /**
-     * Where the two numbers of a "{n,m}" quantifier end in the pattern, the
-     * places PCRE reports a number it refuses.
-     *
-     * @return array{0: int, 1: int}
-     */
-    private function quantifierNumberEnds(QuantifierNode $node): array
-    {
-        // A lazy or possessive quantifier ends with one more character.
-        $suffix = QuantifierType::Greedy() === $node->type ? 0 : 1;
-        $braceStart = $node->getEndPosition() - $suffix - \strlen($node->quantifier);
-        // A comment may stand between the count and its "+" or "?": the
-        // count is found in the source, past the item it repeats.
-        $written = null === $this->source ? false : strpos($this->source, $node->quantifier, $node->node->getEndPosition());
-        if (false !== $written && $written < $braceStart) {
-            $braceStart = $written;
-        }
-
-        if (1 !== LibraryPcre::match('/^\{\s*+(\d*+)\s*+(?:,\s*+(\d*+))?/', $node->quantifier, $matches, \PREG_OFFSET_CAPTURE)) {
-            return [$node->startPosition, $node->startPosition];
-        }
-
-        $minEnd = $braceStart + $matches[1][1] + $this->digitsReadForCount($matches[1][0]);
-        $maxEnd = isset($matches[2]) ? $braceStart + $matches[2][1] + $this->digitsReadForCount($matches[2][0]) : $minEnd;
-
-        return [$minEnd, $maxEnd];
-    }
-
-    /**
-     * How many digits of a count PCRE has read when it refuses one over
-     * 65535: every one from PCRE2 10.45; before, up to the digit that takes
-     * it over.
-     */
-    private function digitsReadForCount(string $digits): int
-    {
-        if ($this->supports(PcreFeature::NumberTooBigPastWholeNumber())) {
-            return \strlen($digits);
-        }
-
-        $value = 0;
-        foreach (Bytes::split($digits) as $index => $digit) {
-            $value = $value * 10 + (int) $digit;
-            if ($value > PcreNumber::MAX) {
-                return $index + 1;
-            }
-        }
-
-        return \strlen($digits);
-    }
-
-    private function isSingleCharNode(NodeInterface $node): bool
-    {
-        return $node instanceof LiteralNode
-            || $node instanceof CharLiteralNode
-            || $node instanceof ControlCharNode;
     }
 
     /**
@@ -1438,187 +970,11 @@ final class Validator extends AbstractNodeVisitor
     }
 
     /**
-     * Whether the version numbers of "(?(VERSION...)" are read whole, as
-     * PCRE2 10.47 does; before, the minor is two digits.
+     * Whether the PCRE2 judged has $feature.
      */
-    private function supports($feature): bool
+    private function supports(PcreFeature $feature): bool
     {
         return $this->target->supports($feature);
-    }
-
-    /**
-     * Whether a "[" read inside a class was written as is, rather than
-     * escaped or quoted: PCRE reads a quoted "[" as text, so "[\Qc[:(\E:]"
-     * opens no POSIX class.
-     */
-    private function isUnquotedClassBracket(string $source, LiteralNode $node): bool
-    {
-        $start = $node->startPosition;
-
-        return !$this->classQuoteOpen && 1 === $node->endPosition - $start && '[' === ($source[$start] ?? '');
-    }
-
-    /**
-     * Follow the "\Q" and "\E" written between two items of a class, from
-     * $from to $to: no node records them, and nothing else sits there but
-     * the class opener, the "^" that negates it, the "-" of a range and,
-     * under "xx", blanks, none of them a backslash, so the last one decides.
-     * Each stretch is read once, which keeps a long quoted class linear.
-     */
-    private function readClassQuotes(int $from, int $to): void
-    {
-        if (null === $this->source || $to <= $from) {
-            return;
-        }
-
-        $between = (string) substr($this->source, $from, $to - $from);
-        $open = strrpos($between, '\Q');
-        $close = strrpos($between, '\E');
-        if (false !== $open || false !== $close) {
-            $this->classQuoteOpen = false === $close || (false !== $open && $open > $close);
-        }
-    }
-
-    /**
-     * A "[" inside a class starts a POSIX item when one closes after it:
-     * "[[:alpha:]]" is known, "[[:foo:]]" and "[[.ch.]]" are errors.
-     *
-     * @param bool $isRangeEnd whether the item ends a range, as in "[a-[.x.]]"
-     */
-    private function validateBracketInClass(string $source, int $start, bool $isRangeEnd = false): void
-    {
-        $terminator = $this->findPosixTerminator($source, $start + 1);
-        if (null === $terminator) {
-            return;
-        }
-
-        // Past the element from PCRE2 10.45; before, on the "[" that opens
-        // a collating element, or on the name of a class.
-        $past = $this->supports(PcreFeature::PosixItemErrorPastItsEnd());
-
-        // As a range end, "[a-[.x.]]", just inside its "[", and refused as a
-        // range PCRE cannot make before its name is read: "[a-[:\d:]]", a
-        // name the lexer reads as no class, too.
-        if ($isRangeEnd) {
-            $this->raiseSemanticError('Invalid range in character class: a POSIX item cannot end a range.', $past ? $terminator + 2 : $start + 1, ErrorCode::RangeInvalidBounds());
-        }
-
-        // After a hyphen that is a member, "[-[.x.]]", on its "[".
-        if (':' !== $source[$start + 1]) {
-            $this->raiseSemanticError('POSIX collating elements are not supported.', $past ? $terminator + 2 : $start, ErrorCode::PosixCollatingElement());
-        }
-
-        $name = (string) substr($source, $start + 2, $terminator - $start - 2);
-        if (!$this->isPosixClassName($name)) {
-            $this->raiseSemanticError(
-                \sprintf('Invalid POSIX class: "%s".', $name),
-                $past ? $terminator + 2 : $start + 2 + (0 === strncmp($name, '^', strlen('^')) ? 1 : 0),
-                ErrorCode::PosixInvalid(),
-            );
-        }
-    }
-
-    /**
-     * "[:alpha:]" written as a class of its own is a POSIX item outside a
-     * class, which PCRE refuses rather than reading as a set of characters.
-     */
-    private function validatePosixOutsideClass(string $source, int $start): void
-    {
-        $terminator = $this->findPosixTerminator($source, $start + 1);
-        if (null === $terminator) {
-            return;
-        }
-
-        // Past its end from PCRE2 10.47, on its "[" before.
-        $offset = $this->target->faultOffset($terminator + 2, $terminator + 2 - $start);
-
-        if (':' === $source[$start + 1]) {
-            $this->raiseSemanticError(
-                'POSIX named classes are supported only within a class.',
-                $offset,
-                ErrorCode::PosixOutsideClass(),
-            );
-        }
-
-        $this->raiseSemanticError(
-            'POSIX collating elements are not supported.',
-            $offset,
-            ErrorCode::PosixCollatingElement(),
-        );
-    }
-
-    /**
-     * PCRE2's check_posix_syntax(): after "[:", "[." or "[=", find the
-     * matching ":]", ".]" or "=]" before any "]" or a new "[:"-like opener.
-     *
-     * @return int|null the offset of the closing ":", "." or "="
-     */
-    private function findPosixTerminator(string $source, int $offset): ?int
-    {
-        return PosixItem::terminator($source, $offset - 1);
-    }
-
-    private function isPosixClassName(string $name): bool
-    {
-        return isset(self::VALID_POSIX_CLASSES[0 === strncmp($name, '^', strlen('^')) ? (string) substr($name, 1) : $name]);
-    }
-
-    /**
-     * The value an endpoint gives the range. Without Unicode mode PCRE reads
-     * the pattern byte by byte, so a multibyte character written as is ends
-     * a range start with its last byte and begins a range end with its first:
-     * "[\u{e9}-\xe0]" is the range from 0xA9 to 0xE0.
-     *
-     * @param bool $isStart whether the node is the start of the range
-     */
-    private function rangeEndpointCodePoint(NodeInterface $node, bool $isStart): ?int
-    {
-        if ($node instanceof LiteralNode) {
-            // Unreachable from a parsed pattern: the parser never gives a
-            // range an empty endpoint. It guards a tree built by hand.
-            if ('' === $node->value) {
-                return null;
-            }
-
-            if (!$this->unicodeMode) {
-                return \ord($isStart ? $node->value[\strlen($node->value) - 1] : $node->value[0]);
-            }
-
-            $codePoint = mb_ord($node->value, 'UTF-8');
-
-            return false === $codePoint ? \ord($node->value) : $codePoint;
-        }
-
-        if ($node instanceof CharLiteralNode || $node instanceof ControlCharNode) {
-            return $node->codePoint >= 0 ? $node->codePoint : null;
-        }
-
-        throw InternalFailureException::unexpectedState('A range endpoint is neither a literal, a character escape nor a control character.');
-    }
-
-    private function describeRange(RangeNode $node): string
-    {
-        $text = null === $this->source
-            ? $this->describeRangeEndpoint($node->start).'-'.$this->describeRangeEndpoint($node->end)
-            : (string) substr($this->source, $node->startPosition, $node->getEndPosition() - $node->startPosition);
-
-        // A range from the last byte of a character, without UTF, starts in
-        // the middle of it: its bytes are spelled.
-        return mb_check_encoding($text, 'UTF-8') ? $text : DisplayEscaper::escapeFragment($text, false);
-    }
-
-    private function describeRangeEndpoint(NodeInterface $node): string
-    {
-        switch (true) {
-            case $node instanceof LiteralNode:
-                return $node->value;
-            case $node instanceof CharLiteralNode:
-                return $node->originalRepresentation;
-            case $node instanceof ControlCharNode:
-                return '\c'.$node->char;
-            default:
-                throw InternalFailureException::unexpectedState('A range endpoint is neither a literal, a character escape nor a control character.');
-        }
     }
 
     private function isLookaround(GroupNode $node): bool
@@ -1629,72 +985,6 @@ final class Validator extends AbstractNodeVisitor
             GroupType::LookbehindPositive(),
             GroupType::LookbehindNegative(),
         ], true);
-    }
-
-    /**
-     * Where the opening run of start-of-pattern settings ends.
-     */
-    private function readStartOfPatternEnd(string $source): int
-    {
-        $names = implode('|', array_keys(StartOptions::NAMES));
-
-        // The run may be empty, so the pattern always matches: the 0 branch
-        // is unreachable and only there for the type.
-        return 1 === LibraryPcre::match('/\A(?:\(\*(?:'.$names.')(?:=\d*+)?\))*+/', $source, $matches) ? \strlen($matches[0]) : 0;
-    }
-
-    /**
-     * "(*TURKISH_CASING)" needs UTF mode, and does not go with
-     * "(*CASELESS_RESTRICT)": PCRE2 refuses both where the opening run of
-     * settings ends, before it reads the rest.
-     */
-    private function validateCasingSettings(RegexNode $node): void
-    {
-        if (null === $node->source || null === $this->startOfPatternEnd || !$this->supports(PcreFeature::CasingSettingVerbs())) {
-            return;
-        }
-
-        $settings = (string) substr($node->source, 0, $this->startOfPatternEnd);
-        if (false === strpos($settings, '(*TURKISH_CASING)')) {
-            return;
-        }
-
-        if (false !== strpos($settings, '(*CASELESS_RESTRICT)')) {
-            $this->raiseSemanticError(
-                '(*TURKISH_CASING) and (*CASELESS_RESTRICT) cannot be used together.',
-                $this->startOfPatternEnd,
-                ErrorCode::VerbConflictingCasings(),
-            );
-        }
-
-        if (false === strpos($node->flags, 'u') && 1 !== LibraryPcre::match('/\(\*UTF8?\)/', $settings)) {
-            $this->raiseSemanticError(
-                false !== strpos($settings, '(*UCP)')
-                    ? '(*TURKISH_CASING) needs UTF mode: UCP alone is not enough.'
-                    : '(*TURKISH_CASING) needs UTF mode.',
-                $this->startOfPatternEnd,
-                ErrorCode::VerbTurkishCasingWithoutUtf(),
-                'Add the "u" modifier.',
-            );
-        }
-    }
-
-    private function validateStartOfPatternPlacement(string $verbName, int $start): void
-    {
-        // One that starts where the run of well-formed settings ends is still
-        // read there, and judged on its value; one in the body of "(*pla:...)"
-        // stands where that body does.
-        if (null === $this->startOfPatternEnd || $start + $this->positionOffset <= $this->startOfPatternEnd) {
-            return;
-        }
-
-        // Anywhere else PCRE does not know the name, and stops where it ends.
-        $this->raiseSemanticError(
-            \sprintf('(*%s) is only recognized at the very start of the pattern.', $verbName),
-            $start + 2 + \strlen($verbName),
-            ErrorCode::VerbMisplaced(),
-            'Move it before anything else in the pattern.',
-        );
     }
 
     /**
@@ -1723,31 +1013,19 @@ final class Validator extends AbstractNodeVisitor
     }
 
     /**
-     * Where PCRE reports a conditional that holds more than two branches:
-     * where the group opens, one character on for each character of a group
-     * number past its first, as in "(?(+1)"; before PCRE2 10.47, on the name
-     * the condition tests.
+     * Point the checks that read the text at the one read now: the payload
+     * of a "(*pla:...)" stepped into, or the text around it once left.
      */
-    private function branchCountErrorOffset(ConditionalNode $node): int
+    private function readText(): void
     {
-        $condition = $node->condition;
-        if ($condition instanceof BackrefNode && 1 === LibraryPcre::match('/^[+-]?\d++$/', $condition->ref)) {
-            return $node->startPosition + \strlen($condition->ref) - 1;
-        }
-
-        if ($this->supports(PcreFeature::BranchCountErrorOffTheConditionName())
-            || !($condition instanceof BackrefNode || $condition instanceof SubroutineNode)) {
-            return $node->startPosition;
-        }
-
-        switch (true) {
-            case $condition instanceof SubroutineNode && 0 === strncmp($condition->reference, 'R&', strlen('R&')):
-                return $condition->startPosition + 2;
-            case \in_array($this->source[$condition->startPosition] ?? '', ['<', "'"], true):
-                return $condition->startPosition + 1;
-            default:
-                return $condition->startPosition + 0;
-        }
+        $this->escapes = $this->escapes->reading($this->source, $this->positionOffset);
+        $this->references = $this->references->reading($this->source, $this->positionOffset);
+        $this->verbs = $this->verbs->reading($this->source, $this->positionOffset);
+        $this->classes = $this->classes->reading($this->source, $this->positionOffset);
+        $this->ranges = $this->ranges->reading($this->source, $this->positionOffset);
+        $this->conditionals = $this->conditionals->reading($this->source, $this->positionOffset);
+        $this->quantifiers = $this->quantifiers->reading($this->source, $this->positionOffset);
+        $this->callouts = $this->callouts->reading($this->source, $this->positionOffset);
     }
 
     /**
@@ -1755,10 +1033,8 @@ final class Validator extends AbstractNodeVisitor
      * than one: PCRE counts them once it has resolved the references, so on
      * a walk from the pattern root the error waits for the walk to end.
      */
-    private function raiseBranchCountError(string $message, int $position, $code, string $hint): void
+    private function keepBranchCountError(SemanticErrorException $error): void
     {
-        $error = new SemanticErrorException($message, $code, $position + $this->positionOffset, $this->pattern, null, $hint);
-
         if (!$this->walkingPattern) {
             throw $error;
         }
@@ -1837,7 +1113,7 @@ final class Validator extends AbstractNodeVisitor
      * A reference or a call met while a lookbehind is measured, which PCRE
      * judges there: a missing group is refused at once.
      *
-     * @param \PHPRegex\Parser\Node\BackrefNode|\PHPRegex\Parser\Node\SubroutineNode $node
+     * @param BackrefNode|SubroutineNode $node
      */
     private function checkMeasuredReference($node): void
     {
@@ -1849,9 +1125,9 @@ final class Validator extends AbstractNodeVisitor
      * references to missing groups, where it meets $at: on a walk from the
      * pattern root, it waits for the walk to end.
      */
-    private function raiseLateCompileError(string $message, int $position, $code, string $hint, int $at): void
+    private function raiseLateCompileError(string $message, int $position, ErrorCode $code, string $hint, int $at): void
     {
-        $error = new SemanticErrorException($message, $code, $position + $this->positionOffset, $this->pattern, null, $hint);
+        $error = new SemanticErrorException($message, $code, $position + $this->positionOffset, $this->pattern, null, null, $hint);
 
         if (!$this->walkingPattern) {
             throw $error;
@@ -1898,15 +1174,8 @@ final class Validator extends AbstractNodeVisitor
     /**
      * @return never
      */
-    private function raiseSemanticError(string $message, int $position, $code, ?string $hint = null)
+    private function raiseSemanticError(string $message, int $position, ErrorCode $code, ?string $hint = null)
     {
-        throw new SemanticErrorException(
-            $message,
-            $code,
-            $position + $this->positionOffset,
-            $this->pattern,
-            null,
-            $hint,
-        );
+        throw new SemanticErrorException($message, $code, $position + $this->positionOffset, $this->pattern, null, null, $hint);
     }
 }

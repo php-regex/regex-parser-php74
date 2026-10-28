@@ -30,7 +30,7 @@ final class QuantifierCounts
     /**
      * @var array<string, array{0: int, 1: int}>
      */
-    private static $quantifierBoundsCache = [];
+    private static array $quantifierBoundsCache = [];
 
     /**
      * Clears the counts read so far.

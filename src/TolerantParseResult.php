@@ -22,16 +22,13 @@ use PHPRegex\Parser\Node\RegexNode;
 final class TolerantParseResult
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\RegexNode
      */
-    public $ast;
-
+    public RegexNode $ast;
     /**
      * @var list<RegexException>
      *
      */
-    public $errors = [];
+    public array $errors = [];
 
     /**
      * @internal built by RegexParser::parseTolerant() and Regex::parseTolerant()

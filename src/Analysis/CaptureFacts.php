@@ -31,7 +31,6 @@ use PHPRegex\Parser\Node\LiteralNode;
 use PHPRegex\Parser\Node\NodeInterface;
 use PHPRegex\Parser\Node\PcreVerbNode;
 use PHPRegex\Parser\Node\PosixClassNode;
-use PHPRegex\Parser\Node\QuantifierBounds;
 use PHPRegex\Parser\Node\QuantifierNode;
 use PHPRegex\Parser\Node\RangeNode;
 use PHPRegex\Parser\Node\SequenceNode;
@@ -58,6 +57,18 @@ use PHPRegex\Parser\Text\Bytes;
  */
 final class CaptureFacts
 {
+    /**
+     */
+    private LengthRangeCalculator $calculator;
+    /**
+     * @var \SplObjectStorage<NodeInterface, LengthRange>
+     */
+    private \SplObjectStorage $lengths;
+    /**
+     * @var \SplObjectStorage<NodeInterface, Facts>
+     *
+     */
+    private \SplObjectStorage $facts;
     /**
      * Past this many strings, the values are unknown.
      */
@@ -98,45 +109,41 @@ final class CaptureFacts
     private const MAX_INT_DIGITS = \PHP_INT_SIZE >= 8 ? 18 : 9;
 
     /**
-     * @var bool
+     * Groups that read what their content reads.
      *
+     * @var list<GroupType>|null
      */
-    private $unicode = false;
+    private static ?array $READ_THROUGH = null;
 
     /**
-     * @var bool
-     *
+     * @return list<GroupType>
      */
-    private $ucp = false;
+    private static function READ_THROUGH(): array
+    {
+        return self::$READ_THROUGH ??= [GroupType::Capturing(), GroupType::Named(), GroupType::NonCapturing(), GroupType::Atomic(), GroupType::BranchReset(), GroupType::InlineFlags()];
+    }
 
     /**
-     * @var GroupIndex|null
+     * Groups that read no character of the subject: the lookarounds, and a
+     * substring scan, which matches inside a capture already read.
      *
+     * @var list<GroupType>|null
      */
-    private $groups;
+    private static ?array $LOOKAROUNDS = null;
 
     /**
-     *
-     * @var \PHPRegex\Parser\Analysis\LengthRangeCalculator
+     * @return list<GroupType>
      */
-    private $calculator;
-
-    /**
-     * @var \SplObjectStorage<NodeInterface, LengthRange>
-     */
-    private $lengths;
-
-    /**
-     * @var \SplObjectStorage<NodeInterface, Facts>
-     *
-     */
-    private $facts;
+    private static function LOOKAROUNDS(): array
+    {
+        return self::$LOOKAROUNDS ??= [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative(), GroupType::ScanSubstring()];
+    }
 
     /**
      * @var \SplObjectStorage<NodeInterface, Facts>
      *
      */
-    private $groupFacts;
+    private \SplObjectStorage $groupFacts;
 
     /**
      * Characters and classes the engine reads caselessly, by object id: a
@@ -144,7 +151,7 @@ final class CaptureFacts
      *
      * @var array<int, true>
      */
-    private $caseless = [];
+    private array $caseless = [];
 
     /**
      * Whether a group runs itself again through the calls it holds, by
@@ -152,7 +159,7 @@ final class CaptureFacts
      *
      * @var array<int, bool>
      */
-    private $recursive = [];
+    private array $recursive = [];
 
     /**
      * Nodes the scan reaches before any part of the pattern may have read
@@ -160,7 +167,7 @@ final class CaptureFacts
      *
      * @var array<int, true>
      */
-    private $atStart = [];
+    private array $atStart = [];
 
     /**
      * Nodes nothing in the pattern follows, by object id: an alternation
@@ -168,7 +175,16 @@ final class CaptureFacts
      *
      * @var array<int, true>
      */
-    private $atEnd = [];
+    private array $atEnd = [];
+    /**
+     */
+    private bool $unicode = false;
+    /**
+     */
+    private bool $ucp = false;
+    /**
+     */
+    private ?GroupIndex $groups = null;
 
     /**
      * @param bool            $unicode lengths count code points, and literals read as UTF-8
@@ -283,33 +299,6 @@ final class CaptureFacts
     }
 
     /**
-     * Groups that read what their content reads.
-     */
-    private static function READ_THROUGH(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [GroupType::Capturing(), GroupType::Named(), GroupType::NonCapturing(), GroupType::Atomic(), GroupType::BranchReset(), GroupType::InlineFlags()];
-        }
-
-        return $cache;
-    }
-
-    /**
-     * Groups that read no character of the subject: the lookarounds, and a
-     * substring scan, which matches inside a capture already read.
-     */
-    private static function LOOKAROUNDS(): array
-    {
-        static $cache = null;
-        if (null === $cache) {
-            $cache = [GroupType::LookaheadPositive(), GroupType::LookaheadNegative(), GroupType::LookbehindPositive(), GroupType::LookbehindNegative(), GroupType::ScanSubstring()];
-        }
-
-        return $cache;
-    }
-
-    /**
      * The strings a node can match, when they are a small finite set read
      * from literals alone.
      *
@@ -318,30 +307,30 @@ final class CaptureFacts
     private function values(NodeInterface $node, bool $scan = false): ?array
     {
         switch (true) {
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return $this->folds($node->value, $this->readsCaselessly($node)) ? null : [$node->value];
-            case $node instanceof CharLiteralNode:
+            case true === $node instanceof CharLiteralNode:
                 return $this->character($node->codePoint, $this->readsCaselessly($node));
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return $this->product(array_map(fn (NodeInterface $child): ?array => $this->values($child, $scan), $node->children));
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return $this->alternationValues($node, $scan);
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return self::isLookaround($node) ? [''] : $this->values($node->child, $scan);
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return $this->repeat($node, $scan);
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 return $this->classMembers($node);
-            case $node instanceof AnchorNode:
-            case $node instanceof AssertionNode:
-            case $node instanceof CommentNode:
-            case $node instanceof KeepNode:
-            case $node instanceof DefineNode:
-            case $node instanceof CalloutNode:
+            case true === $node instanceof AnchorNode:
+            case true === $node instanceof AssertionNode:
+            case true === $node instanceof CommentNode:
+            case true === $node instanceof KeepNode:
+            case true === $node instanceof DefineNode:
+            case true === $node instanceof CalloutNode:
                 return [''];
-            case $node instanceof PcreVerbNode:
-                return 0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT')) ? null : [''];
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof PcreVerbNode:
+                return 'ACCEPT' === $node->name ? null : [''];
+            case true === $node instanceof SubroutineNode:
                 return null === ($body = $this->calledBody($node)) ? null : $this->values($body, $scan);
             default:
                 return null;
@@ -362,7 +351,7 @@ final class CaptureFacts
 
         $seen = [];
 
-        return ($this->recursive[spl_object_id($group)] = $this->recursive[spl_object_id($group)] ?? $this->reaches($group, $group, $seen)) ? null : $group->child;
+        return ($this->recursive[spl_object_id($group)] ??= $this->reaches($group, $group, $seen)) ? null : $group->child;
     }
 
     /**
@@ -538,7 +527,7 @@ final class CaptureFacts
                     return null;
                 }
 
-                for ($codePoint = $from; $codePoint <= $to; $codePoint++) {
+                for ($codePoint = $from; $codePoint <= $to; ++$codePoint) {
                     $character = $this->character($codePoint, $caseless);
                     if (null === $character) {
                         return null;
@@ -615,7 +604,7 @@ final class CaptureFacts
      */
     private function repeat(QuantifierNode $node, bool $scan = false): ?array
     {
-        $bounds = QuantifierBounds::parse($node->quantifier);
+        $bounds = $node->bounds;
         $body = $this->values($node->node, $scan);
         if (null === $bounds || null === $body || null === $bounds->max) {
             return null;
@@ -635,7 +624,7 @@ final class CaptureFacts
         // possessive, the quantifier still stops at one of these counts.
         $values = 0 === $bounds->min ? [''] : [];
         $power = [''];
-        for ($count = 1; $count <= $bounds->max; $count++) {
+        for ($count = 1; $count <= $bounds->max; ++$count) {
             $power = $this->product([$power, $body]);
             $values = $count < $bounds->min || null === $power ? $values : $this->union([$values, $power]);
             if (null === $power || null === $values) {
@@ -651,7 +640,8 @@ final class CaptureFacts
      */
     private function character(int $codePoint, bool $caseless): ?array
     {
-        if ($caseless && $this->foldsCodePoint($codePoint)) {
+        // No code point (-1): a "\N{name}" whose name reads as no character.
+        if ($codePoint < 0 || ($caseless && $this->foldsCodePoint($codePoint))) {
             return null;
         }
 
@@ -691,7 +681,7 @@ final class CaptureFacts
             return false;
         }
 
-        for ($i = 0, $n = \strlen($value); $i < $n; $i++) {
+        for ($i = 0, $n = \strlen($value); $i < $n; ++$i) {
             if ($this->foldsCodePoint(\ord($value[$i]))) {
                 return true;
             }
@@ -775,19 +765,19 @@ final class CaptureFacts
     private function mayBeZero(NodeInterface $node): bool
     {
         switch (true) {
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 return null === ($body = $this->calledBody($node)) || $this->mayBeZero($body);
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 return $node->isNegated ? !$this->holdsZero($node->expression) : $this->classMayHoldZero($node->expression);
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return $this->sequenceMayBeZero($node->children);
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return self::any($node->alternatives, \Closure::fromCallable([$this, 'mayBeZero']));
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return !self::isLookaround($node) && $this->mayBeZero($node->child);
-            case $node instanceof QuantifierNode:
-                return 0 !== (($nullsafeVariable3 = QuantifierBounds::parse($node->quantifier)) ? $nullsafeVariable3->max : null) && $this->mayBeZero($node->node);
-            case self::consumesNothing($node):
+            case true === $node instanceof QuantifierNode:
+                return 0 !== (($nullsafeVariable3 = $node->bounds) ? $nullsafeVariable3->max : null) && $this->mayBeZero($node->node);
+            case true === self::consumesNothing($node):
                 return false;
             default:
                 return $this->readsZero($node, false) ?? true;
@@ -797,7 +787,8 @@ final class CaptureFacts
     /**
      * Whether a concatenation may read "0" alone: some child reads it while
      * every other child reads nothing — a mandatory character anywhere else
-     * pins the value off zero.
+     * pins the value off zero, unless an (*ACCEPT) before it may cut the
+     * sequence short.
      *
      * @param list<NodeInterface> $children
      */
@@ -808,11 +799,17 @@ final class CaptureFacts
                 continue;
             }
 
+            // a child past an (*ACCEPT) that may end the sequence may not
+            // run: preg_match('/(?=(0(*ACCEPT)1))/', '0') sets group 1 to "0"
             $pinned = false;
             foreach ($children as $child) {
                 if ($child !== $candidate && $this->lengths($child)[0] >= 1) {
                     $pinned = true;
 
+                    break;
+                }
+
+                if (AcceptVerb::mayEndMatch($child)) {
                     break;
                 }
             }
@@ -831,11 +828,11 @@ final class CaptureFacts
     private function classMayHoldZero(NodeInterface $member): bool
     {
         switch (true) {
-            case $member instanceof AlternationNode:
+            case true === $member instanceof AlternationNode:
                 return self::any($member->alternatives, \Closure::fromCallable([$this, 'classMayHoldZero']));
-            case $member instanceof RangeNode:
+            case true === $member instanceof RangeNode:
                 return null === ($range = $this->range($member)) || ($range[0] <= 0x30 && 0x30 <= $range[1]);
-            case $member instanceof PosixClassNode:
+            case true === $member instanceof PosixClassNode:
                 return !\in_array($member->class, self::ZERO_FREE_POSIX, true);
             default:
                 return $this->readsZero($member, false) ?? true;
@@ -861,10 +858,10 @@ final class CaptureFacts
     private function readsZero(NodeInterface $atom, bool $surely): ?bool
     {
         switch (true) {
-            case $atom instanceof LiteralNode:
-            case $atom instanceof CharLiteralNode:
+            case true === $atom instanceof LiteralNode:
+            case true === $atom instanceof CharLiteralNode:
                 return 0x30 === $this->codePoint($atom);
-            case $atom instanceof CharTypeNode:
+            case true === $atom instanceof CharTypeNode:
                 return $surely ? 'd' === $atom->value : !\in_array($atom->value, self::ZERO_FREE_TYPES, true);
             default:
                 return null;
@@ -879,22 +876,22 @@ final class CaptureFacts
     private function digitsOnly(NodeInterface $node): bool
     {
         switch (true) {
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return '' === $node->value || Ascii::isDigit($node->value);
-            case $node instanceof CharLiteralNode:
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof CharTypeNode:
                 return $this->isDigitMember($node);
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 return !$node->isNegated && $this->isDigitMember($node->expression);
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return self::all($node->children, \Closure::fromCallable([$this, 'digitsOnly']));
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return self::all($node->alternatives, \Closure::fromCallable([$this, 'digitsOnly']));
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return self::isLookaround($node) || $this->digitsOnly($node->child);
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return $this->digitsOnly($node->node);
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 return null !== ($body = $this->calledBody($node)) && $this->digitsOnly($body);
             default:
                 return self::consumesNothing($node);
@@ -907,16 +904,16 @@ final class CaptureFacts
     private function isDigitMember(NodeInterface $member): bool
     {
         switch (true) {
-            case $member instanceof AlternationNode:
+            case true === $member instanceof AlternationNode:
                 return self::all($member->alternatives, \Closure::fromCallable([$this, 'isDigitMember']));
-            case $member instanceof LiteralNode:
-            case $member instanceof CharLiteralNode:
+            case true === $member instanceof LiteralNode:
+            case true === $member instanceof CharLiteralNode:
                 return self::isDigit($this->codePoint($member));
-            case $member instanceof RangeNode:
+            case true === $member instanceof RangeNode:
                 return null !== ($range = $this->range($member)) && self::isDigit($range[0]) && self::isDigit($range[1]);
-            case $member instanceof CharTypeNode:
+            case true === $member instanceof CharTypeNode:
                 return 'd' === $member->value && !$this->ucp;
-            case $member instanceof PosixClassNode:
+            case true === $member instanceof PosixClassNode:
                 return 'digit' === $member->class && !$this->ucp;
             default:
                 return false;
@@ -994,16 +991,16 @@ final class CaptureFacts
         $node = self::readThrough($node);
 
         switch (true) {
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return self::all($node->alternatives, fn (NodeInterface $branch): bool => $this->startsWithNonZero($branch, $scan));
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return $this->sequenceStartsWithNonZero($node->children, $scan);
-            case $node instanceof QuantifierNode:
-                return (QuantifierBounds::parse($node->quantifier)->min ?? 0) >= 1 && $this->startsWithNonZero($node->node, $scan);
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof QuantifierNode:
+                return ($node->bounds->min ?? 0) >= 1 && $this->startsWithNonZero($node->node, $scan);
+            case true === $node instanceof SubroutineNode:
                 return null !== ($body = $this->calledBody($node)) && $this->startsWithNonZero($body, $scan);
-            case $node instanceof CharClassNode:
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharClassNode:
+            case true === $node instanceof CharTypeNode:
                 return $this->lengths($node)[0] >= 1 && !$this->mayBeZero($node);
             default:
                 return false;
@@ -1035,26 +1032,26 @@ final class CaptureFacts
         $caseless = $this->readsCaselessly($node);
 
         switch (true) {
-            case $node instanceof LiteralNode:
+            case true === $node instanceof LiteralNode:
                 return $this->stringHoldsNoLetter($node->value, $caseless, $upper);
-            case $node instanceof CharLiteralNode:
-            case $node instanceof ControlCharNode:
+            case true === $node instanceof CharLiteralNode:
+            case true === $node instanceof ControlCharNode:
                 return $this->rangeHoldsNoLetter($node->codePoint, $node->codePoint, $caseless, $upper);
-            case $node instanceof CharTypeNode:
+            case true === $node instanceof CharTypeNode:
                 return \in_array($node->value, self::LETTER_FREE_TYPES, true);
-            case $node instanceof CharClassNode:
+            case true === $node instanceof CharClassNode:
                 return !$node->isNegated && $this->memberHoldsNoLetter($node->expression, $caseless, $upper);
-            case $node instanceof UnicodePropNode:
+            case true === $node instanceof UnicodePropNode:
                 return self::propertyHoldsNoLetter($node, $caseless, $upper);
-            case $node instanceof SequenceNode:
+            case true === $node instanceof SequenceNode:
                 return self::all($node->children, fn (NodeInterface $child): bool => $this->holdsNoLetter($child, $upper));
-            case $node instanceof AlternationNode:
+            case true === $node instanceof AlternationNode:
                 return self::all($node->alternatives, fn (NodeInterface $branch): bool => $this->holdsNoLetter($branch, $upper));
-            case $node instanceof GroupNode:
+            case true === $node instanceof GroupNode:
                 return self::isLookaround($node) || $this->holdsNoLetter($node->child, $upper);
-            case $node instanceof QuantifierNode:
+            case true === $node instanceof QuantifierNode:
                 return $this->holdsNoLetter($node->node, $upper);
-            case $node instanceof SubroutineNode:
+            case true === $node instanceof SubroutineNode:
                 return null !== ($body = $this->calledBody($node)) && $this->holdsNoLetter($body, $upper);
             default:
                 return self::consumesNothing($node);
@@ -1068,21 +1065,21 @@ final class CaptureFacts
     private function memberHoldsNoLetter(NodeInterface $member, bool $caseless, bool $upper): bool
     {
         switch (true) {
-            case $member instanceof AlternationNode:
+            case true === $member instanceof AlternationNode:
                 return self::all($member->alternatives, fn (NodeInterface $alternative): bool => $this->memberHoldsNoLetter($alternative, $caseless, $upper));
-            case $member instanceof LiteralNode:
+            case true === $member instanceof LiteralNode:
                 return $this->stringHoldsNoLetter($member->value, $caseless, $upper);
-            case $member instanceof CharLiteralNode:
-            case $member instanceof ControlCharNode:
+            case true === $member instanceof CharLiteralNode:
+            case true === $member instanceof ControlCharNode:
                 return $this->rangeHoldsNoLetter($member->codePoint, $member->codePoint, $caseless, $upper);
-            case $member instanceof RangeNode:
+            case true === $member instanceof RangeNode:
                 return null !== ($range = $this->range($member)) && $this->rangeHoldsNoLetter($range[0], $range[1], $caseless, $upper);
-            case $member instanceof CharTypeNode:
+            case true === $member instanceof CharTypeNode:
                 return \in_array($member->value, self::LETTER_FREE_TYPES, true);
-            case $member instanceof PosixClassNode:
+            case true === $member instanceof PosixClassNode:
                 return \in_array($member->class, self::LETTER_FREE_POSIX, true)
                     || (!$caseless && ($upper ? 'lower' : 'upper') === $member->class);
-            case $member instanceof UnicodePropNode:
+            case true === $member instanceof UnicodePropNode:
                 return self::propertyHoldsNoLetter($member, $caseless, $upper);
             default:
                 return false;
@@ -1095,7 +1092,7 @@ final class CaptureFacts
      */
     private function stringHoldsNoLetter(string $value, bool $caseless, bool $upper): bool
     {
-        for ($i = 0, $n = \strlen($value); $i < $n; $i++) {
+        for ($i = 0, $n = \strlen($value); $i < $n; ++$i) {
             if (!$this->rangeHoldsNoLetter(\ord($value[$i]), \ord($value[$i]), $caseless, $upper)) {
                 return false;
             }
@@ -1148,7 +1145,7 @@ final class CaptureFacts
     private static function accepts(NodeInterface $node): bool
     {
         if ($node instanceof PcreVerbNode) {
-            return 0 === strncmp($node->verb, 'ACCEPT', strlen('ACCEPT'));
+            return 'ACCEPT' === $node->name;
         }
 
         foreach ($node->getChildren() as $child) {

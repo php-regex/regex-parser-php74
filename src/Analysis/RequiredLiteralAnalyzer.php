@@ -33,10 +33,7 @@ use PHPRegex\Parser\Node\RegexNode;
  */
 final class RequiredLiteralAnalyzer
 {
-    /**
-     * @var bool
-     */
-    private $unicode = false;
+    private bool $unicode = false;
 
     /**
      * @return list<string> the strings, longest runs first in pattern order,
@@ -60,25 +57,20 @@ final class RequiredLiteralAnalyzer
         }
 
         switch (true) {
-            case $hir instanceof ConcatHir:
+            case true === $hir instanceof ConcatHir:
                 $required = $this->concat($hir);
-
                 break;
-            case $hir instanceof AlternationHir:
+            case true === $hir instanceof AlternationHir:
                 $required = $this->shared($hir);
-
                 break;
-            case $hir instanceof RepetitionHir:
+            case true === $hir instanceof RepetitionHir:
                 $required = $hir->min > 0 ? $this->required($hir->body) : [];
-
                 break;
-            case $hir instanceof CaptureHir:
+            case true === $hir instanceof CaptureHir:
                 $required = $this->required($hir->body);
-
                 break;
             default:
                 $required = [];
-
                 break;
         }
 

@@ -25,21 +25,16 @@ use PHPRegex\Parser\Engine\LibraryPcre;
 final class QuantifierBounds
 {
     /**
-     *
-     * @var int
      */
-    public $min;
-
+    public int $min;
     /**
-     *
-     * @var int|null
      */
-    public $max;
+    public ?int $max;
 
     private function __construct(int $min, ?int $max)
     {
         $this->min = $min;
-        /*
+        /**
          * Maximum repetitions, or null when unbounded ("*", "+", "{n,}").
          */
         $this->max = $max;
@@ -61,12 +56,12 @@ final class QuantifierBounds
             }
         }
 
-        switch ($base) {
-            case '*':
+        switch (true) {
+            case '*' === $base:
                 return new self(0, null);
-            case '+':
+            case '+' === $base:
                 return new self(1, null);
-            case '?':
+            case '?' === $base:
                 return new self(0, 1);
             default:
                 // "{m,n}" bounds and literals are read below the switch.

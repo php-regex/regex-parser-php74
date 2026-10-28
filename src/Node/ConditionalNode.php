@@ -21,22 +21,14 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class ConditionalNode extends AbstractNode
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $condition;
-
+    public NodeInterface $condition;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $yes;
-
+    public NodeInterface $yes;
     /**
-     *
-     * @var \PHPRegex\Parser\Node\NodeInterface
      */
-    public $no;
+    public NodeInterface $no;
 
     public function __construct(
         NodeInterface $condition,

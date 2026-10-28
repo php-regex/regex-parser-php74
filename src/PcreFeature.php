@@ -2,601 +2,337 @@
 
 declare(strict_types=1);
 
-/*
- * This file is part of the PHPRegex package.
- *
- * (c) Younes ENNAJI <younes.ennaji.pro@gmail.com>
- *
- * For the full copyright and license information, please view the LICENSE
- * file that was distributed with this source code.
- */
-
 namespace PHPRegex\Parser;
 
 /**
- * Cached-instance twin of the PcreFeature enum: GroupType::Capturing()
- * returns one shared instance, so identity comparisons, ->value and
- * native type hints keep the enum's semantics on PHP 7.4.
+ * The PcreFeature enum as a class of shared instances: PcreFeature::AlphabeticAssertionNames() returns
+ * the same instance at each call.
  */
-final class PcreFeature
+final class PcreFeature implements UnitEnum
 {
-    /**
-     * @var string
-     */
-    public $name;
+    /** @var array<string, self> */
+    private static array $instances = [];
 
-    /**
-     * @var string
-     */
-    public $value;
+    public string $name;
 
-    /**
-     * @var array<string, self>
-     */
-    private static $instances = [];
-
-    private function __construct(string $name, string $value)
+    private function __construct(string $name)
     {
         $this->name = $name;
-        $this->value = $value;
     }
 
     public static function AlphabeticAssertionNames(): self
     {
-        if (!isset(self::$instances['AlphabeticAssertionNames'])) {
-            self::$instances['AlphabeticAssertionNames'] = new self('AlphabeticAssertionNames', 'AlphabeticAssertionNames');
-        }
-
-        return self::$instances['AlphabeticAssertionNames'];
+        return self::$instances['AlphabeticAssertionNames'] ??= new self('AlphabeticAssertionNames');
     }
 
     public static function ScriptRuns(): self
     {
-        if (!isset(self::$instances['ScriptRuns'])) {
-            self::$instances['ScriptRuns'] = new self('ScriptRuns', 'ScriptRuns');
-        }
-
-        return self::$instances['ScriptRuns'];
+        return self::$instances['ScriptRuns'] ??= new self('ScriptRuns');
     }
 
     public static function NonAsciiGroupNames(): self
     {
-        if (!isset(self::$instances['NonAsciiGroupNames'])) {
-            self::$instances['NonAsciiGroupNames'] = new self('NonAsciiGroupNames', 'NonAsciiGroupNames');
-        }
-
-        return self::$instances['NonAsciiGroupNames'];
+        return self::$instances['NonAsciiGroupNames'] ??= new self('NonAsciiGroupNames');
     }
 
     public static function BadEscapeInClassStaysRefused(): self
     {
-        if (!isset(self::$instances['BadEscapeInClassStaysRefused'])) {
-            self::$instances['BadEscapeInClassStaysRefused'] = new self('BadEscapeInClassStaysRefused', 'BadEscapeInClassStaysRefused');
-        }
-
-        return self::$instances['BadEscapeInClassStaysRefused'];
+        return self::$instances['BadEscapeInClassStaysRefused'] ??= new self('BadEscapeInClassStaysRefused');
     }
 
     public static function NamesReadWhole(): self
     {
-        if (!isset(self::$instances['NamesReadWhole'])) {
-            self::$instances['NamesReadWhole'] = new self('NamesReadWhole', 'NamesReadWhole');
-        }
-
-        return self::$instances['NamesReadWhole'];
+        return self::$instances['NamesReadWhole'] ??= new self('NamesReadWhole');
     }
 
     public static function AnyPropertyMatchesAnyCharacter(): self
     {
-        if (!isset(self::$instances['AnyPropertyMatchesAnyCharacter'])) {
-            self::$instances['AnyPropertyMatchesAnyCharacter'] = new self('AnyPropertyMatchesAnyCharacter', 'AnyPropertyMatchesAnyCharacter');
-        }
-
-        return self::$instances['AnyPropertyMatchesAnyCharacter'];
+        return self::$instances['AnyPropertyMatchesAnyCharacter'] ??= new self('AnyPropertyMatchesAnyCharacter');
     }
 
     public static function QuantifiedAccept(): self
     {
-        if (!isset(self::$instances['QuantifiedAccept'])) {
-            self::$instances['QuantifiedAccept'] = new self('QuantifiedAccept', 'QuantifiedAccept');
-        }
-
-        return self::$instances['QuantifiedAccept'];
+        return self::$instances['QuantifiedAccept'] ??= new self('QuantifiedAccept');
     }
 
     public static function PossessiveRepeatOnceIsAtomic(): self
     {
-        if (!isset(self::$instances['PossessiveRepeatOnceIsAtomic'])) {
-            self::$instances['PossessiveRepeatOnceIsAtomic'] = new self('PossessiveRepeatOnceIsAtomic', 'PossessiveRepeatOnceIsAtomic');
-        }
-
-        return self::$instances['PossessiveRepeatOnceIsAtomic'];
+        return self::$instances['PossessiveRepeatOnceIsAtomic'] ??= new self('PossessiveRepeatOnceIsAtomic');
     }
 
     public static function NonAtomicAssertionNames(): self
     {
-        if (!isset(self::$instances['NonAtomicAssertionNames'])) {
-            self::$instances['NonAtomicAssertionNames'] = new self('NonAtomicAssertionNames', 'NonAtomicAssertionNames');
-        }
-
-        return self::$instances['NonAtomicAssertionNames'];
+        return self::$instances['NonAtomicAssertionNames'] ??= new self('NonAtomicAssertionNames');
     }
 
     public static function LookbehindInLookaheadMeasured(): self
     {
-        if (!isset(self::$instances['LookbehindInLookaheadMeasured'])) {
-            self::$instances['LookbehindInLookaheadMeasured'] = new self('LookbehindInLookaheadMeasured', 'LookbehindInLookaheadMeasured');
-        }
-
-        return self::$instances['LookbehindInLookaheadMeasured'];
+        return self::$instances['LookbehindInLookaheadMeasured'] ??= new self('LookbehindInLookaheadMeasured');
     }
 
     public static function LookbehindLengthOverflowRefused(): self
     {
-        if (!isset(self::$instances['LookbehindLengthOverflowRefused'])) {
-            self::$instances['LookbehindLengthOverflowRefused'] = new self('LookbehindLengthOverflowRefused', 'LookbehindLengthOverflowRefused');
-        }
-
-        return self::$instances['LookbehindLengthOverflowRefused'];
+        return self::$instances['LookbehindLengthOverflowRefused'] ??= new self('LookbehindLengthOverflowRefused');
     }
 
     public static function LongestLookbehindCountsItsBranchesOnly(): self
     {
-        if (!isset(self::$instances['LongestLookbehindCountsItsBranchesOnly'])) {
-            self::$instances['LongestLookbehindCountsItsBranchesOnly'] = new self('LongestLookbehindCountsItsBranchesOnly', 'LongestLookbehindCountsItsBranchesOnly');
-        }
-
-        return self::$instances['LongestLookbehindCountsItsBranchesOnly'];
+        return self::$instances['LongestLookbehindCountsItsBranchesOnly'] ??= new self('LongestLookbehindCountsItsBranchesOnly');
     }
 
     public static function CasePairClassIsACaselessCharacter(): self
     {
-        if (!isset(self::$instances['CasePairClassIsACaselessCharacter'])) {
-            self::$instances['CasePairClassIsACaselessCharacter'] = new self('CasePairClassIsACaselessCharacter', 'CasePairClassIsACaselessCharacter');
-        }
-
-        return self::$instances['CasePairClassIsACaselessCharacter'];
+        return self::$instances['CasePairClassIsACaselessCharacter'] ??= new self('CasePairClassIsACaselessCharacter');
     }
 
     public static function NonAtomicAssertionShortSyntax(): self
     {
-        if (!isset(self::$instances['NonAtomicAssertionShortSyntax'])) {
-            self::$instances['NonAtomicAssertionShortSyntax'] = new self('NonAtomicAssertionShortSyntax', 'NonAtomicAssertionShortSyntax');
-        }
-
-        return self::$instances['NonAtomicAssertionShortSyntax'];
+        return self::$instances['NonAtomicAssertionShortSyntax'] ??= new self('NonAtomicAssertionShortSyntax');
     }
 
     public static function GroupHoldingItsOwnReferenceBacktracks(): self
     {
-        if (!isset(self::$instances['GroupHoldingItsOwnReferenceBacktracks'])) {
-            self::$instances['GroupHoldingItsOwnReferenceBacktracks'] = new self('GroupHoldingItsOwnReferenceBacktracks', 'GroupHoldingItsOwnReferenceBacktracks');
-        }
-
-        return self::$instances['GroupHoldingItsOwnReferenceBacktracks'];
+        return self::$instances['GroupHoldingItsOwnReferenceBacktracks'] ??= new self('GroupHoldingItsOwnReferenceBacktracks');
     }
 
     public static function RepeatedAssertionKeepsItsCount(): self
     {
-        if (!isset(self::$instances['RepeatedAssertionKeepsItsCount'])) {
-            self::$instances['RepeatedAssertionKeepsItsCount'] = new self('RepeatedAssertionKeepsItsCount', 'RepeatedAssertionKeepsItsCount');
-        }
-
-        return self::$instances['RepeatedAssertionKeepsItsCount'];
+        return self::$instances['RepeatedAssertionKeepsItsCount'] ??= new self('RepeatedAssertionKeepsItsCount');
     }
 
     public static function UcpFoldsPastAsciiWithoutUtf(): self
     {
-        if (!isset(self::$instances['UcpFoldsPastAsciiWithoutUtf'])) {
-            self::$instances['UcpFoldsPastAsciiWithoutUtf'] = new self('UcpFoldsPastAsciiWithoutUtf', 'UcpFoldsPastAsciiWithoutUtf');
-        }
-
-        return self::$instances['UcpFoldsPastAsciiWithoutUtf'];
+        return self::$instances['UcpFoldsPastAsciiWithoutUtf'] ??= new self('UcpFoldsPastAsciiWithoutUtf');
     }
 
     public static function DefineSkippedInLookbehind(): self
     {
-        if (!isset(self::$instances['DefineSkippedInLookbehind'])) {
-            self::$instances['DefineSkippedInLookbehind'] = new self('DefineSkippedInLookbehind', 'DefineSkippedInLookbehind');
-        }
-
-        return self::$instances['DefineSkippedInLookbehind'];
+        return self::$instances['DefineSkippedInLookbehind'] ??= new self('DefineSkippedInLookbehind');
     }
 
     public static function LargeOpenCountIsText(): self
     {
-        if (!isset(self::$instances['LargeOpenCountIsText'])) {
-            self::$instances['LargeOpenCountIsText'] = new self('LargeOpenCountIsText', 'LargeOpenCountIsText');
-        }
-
-        return self::$instances['LargeOpenCountIsText'];
+        return self::$instances['LargeOpenCountIsText'] ??= new self('LargeOpenCountIsText');
     }
 
     public static function OverflowingBackslashNumberIsOctal(): self
     {
-        if (!isset(self::$instances['OverflowingBackslashNumberIsOctal'])) {
-            self::$instances['OverflowingBackslashNumberIsOctal'] = new self('OverflowingBackslashNumberIsOctal', 'OverflowingBackslashNumberIsOctal');
-        }
-
-        return self::$instances['OverflowingBackslashNumberIsOctal'];
+        return self::$instances['OverflowingBackslashNumberIsOctal'] ??= new self('OverflowingBackslashNumberIsOctal');
     }
 
     public static function LoosePropertyNames(): self
     {
-        if (!isset(self::$instances['LoosePropertyNames'])) {
-            self::$instances['LoosePropertyNames'] = new self('LoosePropertyNames', 'LoosePropertyNames');
-        }
-
-        return self::$instances['LoosePropertyNames'];
+        return self::$instances['LoosePropertyNames'] ??= new self('LoosePropertyNames');
     }
 
     public static function OpenAndPaddedRepeatCounts(): self
     {
-        if (!isset(self::$instances['OpenAndPaddedRepeatCounts'])) {
-            self::$instances['OpenAndPaddedRepeatCounts'] = new self('OpenAndPaddedRepeatCounts', 'OpenAndPaddedRepeatCounts');
-        }
-
-        return self::$instances['OpenAndPaddedRepeatCounts'];
+        return self::$instances['OpenAndPaddedRepeatCounts'] ??= new self('OpenAndPaddedRepeatCounts');
     }
 
     public static function PaddedBracedEscapes(): self
     {
-        if (!isset(self::$instances['PaddedBracedEscapes'])) {
-            self::$instances['PaddedBracedEscapes'] = new self('PaddedBracedEscapes', 'PaddedBracedEscapes');
-        }
-
-        return self::$instances['PaddedBracedEscapes'];
+        return self::$instances['PaddedBracedEscapes'] ??= new self('PaddedBracedEscapes');
     }
 
     public static function VariableLengthLookbehind(): self
     {
-        if (!isset(self::$instances['VariableLengthLookbehind'])) {
-            self::$instances['VariableLengthLookbehind'] = new self('VariableLengthLookbehind', 'VariableLengthLookbehind');
-        }
-
-        return self::$instances['VariableLengthLookbehind'];
+        return self::$instances['VariableLengthLookbehind'] ??= new self('VariableLengthLookbehind');
     }
 
     public static function CaselessRestrictModifier(): self
     {
-        if (!isset(self::$instances['CaselessRestrictModifier'])) {
-            self::$instances['CaselessRestrictModifier'] = new self('CaselessRestrictModifier', 'CaselessRestrictModifier');
-        }
-
-        return self::$instances['CaselessRestrictModifier'];
+        return self::$instances['CaselessRestrictModifier'] ??= new self('CaselessRestrictModifier');
     }
 
     public static function AsciiOptions(): self
     {
-        if (!isset(self::$instances['AsciiOptions'])) {
-            self::$instances['AsciiOptions'] = new self('AsciiOptions', 'AsciiOptions');
-        }
+        return self::$instances['AsciiOptions'] ??= new self('AsciiOptions');
+    }
 
-        return self::$instances['AsciiOptions'];
+    public static function UcpWordTakesMarksAndConnectors(): self
+    {
+        return self::$instances['UcpWordTakesMarksAndConnectors'] ??= new self('UcpWordTakesMarksAndConnectors');
     }
 
     public static function LongGroupNames(): self
     {
-        if (!isset(self::$instances['LongGroupNames'])) {
-            self::$instances['LongGroupNames'] = new self('LongGroupNames', 'LongGroupNames');
-        }
-
-        return self::$instances['LongGroupNames'];
+        return self::$instances['LongGroupNames'] ??= new self('LongGroupNames');
     }
 
     public static function ScanSubstring(): self
     {
-        if (!isset(self::$instances['ScanSubstring'])) {
-            self::$instances['ScanSubstring'] = new self('ScanSubstring', 'ScanSubstring');
-        }
-
-        return self::$instances['ScanSubstring'];
+        return self::$instances['ScanSubstring'] ??= new self('ScanSubstring');
     }
 
     public static function ExtendedCharClass(): self
     {
-        if (!isset(self::$instances['ExtendedCharClass'])) {
-            self::$instances['ExtendedCharClass'] = new self('ExtendedCharClass', 'ExtendedCharClass');
-        }
-
-        return self::$instances['ExtendedCharClass'];
+        return self::$instances['ExtendedCharClass'] ??= new self('ExtendedCharClass');
     }
 
     public static function CasingSettingVerbs(): self
     {
-        if (!isset(self::$instances['CasingSettingVerbs'])) {
-            self::$instances['CasingSettingVerbs'] = new self('CasingSettingVerbs', 'CasingSettingVerbs');
-        }
-
-        return self::$instances['CasingSettingVerbs'];
+        return self::$instances['CasingSettingVerbs'] ??= new self('CasingSettingVerbs');
     }
 
     public static function HugeBackreferenceNumberIsReference(): self
     {
-        if (!isset(self::$instances['HugeBackreferenceNumberIsReference'])) {
-            self::$instances['HugeBackreferenceNumberIsReference'] = new self('HugeBackreferenceNumberIsReference', 'HugeBackreferenceNumberIsReference');
-        }
-
-        return self::$instances['HugeBackreferenceNumberIsReference'];
+        return self::$instances['HugeBackreferenceNumberIsReference'] ??= new self('HugeBackreferenceNumberIsReference');
     }
 
     public static function NumberTooBigPastWholeNumber(): self
     {
-        if (!isset(self::$instances['NumberTooBigPastWholeNumber'])) {
-            self::$instances['NumberTooBigPastWholeNumber'] = new self('NumberTooBigPastWholeNumber', 'NumberTooBigPastWholeNumber');
-        }
-
-        return self::$instances['NumberTooBigPastWholeNumber'];
+        return self::$instances['NumberTooBigPastWholeNumber'] ??= new self('NumberTooBigPastWholeNumber');
     }
 
     public static function LimitValueErrorOnFaultingCharacter(): self
     {
-        if (!isset(self::$instances['LimitValueErrorOnFaultingCharacter'])) {
-            self::$instances['LimitValueErrorOnFaultingCharacter'] = new self('LimitValueErrorOnFaultingCharacter', 'LimitValueErrorOnFaultingCharacter');
-        }
-
-        return self::$instances['LimitValueErrorOnFaultingCharacter'];
+        return self::$instances['LimitValueErrorOnFaultingCharacter'] ??= new self('LimitValueErrorOnFaultingCharacter');
     }
 
     public static function PosixItemErrorPastItsEnd(): self
     {
-        if (!isset(self::$instances['PosixItemErrorPastItsEnd'])) {
-            self::$instances['PosixItemErrorPastItsEnd'] = new self('PosixItemErrorPastItsEnd', 'PosixItemErrorPastItsEnd');
-        }
-
-        return self::$instances['PosixItemErrorPastItsEnd'];
+        return self::$instances['PosixItemErrorPastItsEnd'] ??= new self('PosixItemErrorPastItsEnd');
     }
 
     public static function MalformedPropertyName(): self
     {
-        if (!isset(self::$instances['MalformedPropertyName'])) {
-            self::$instances['MalformedPropertyName'] = new self('MalformedPropertyName', 'MalformedPropertyName');
-        }
-
-        return self::$instances['MalformedPropertyName'];
+        return self::$instances['MalformedPropertyName'] ??= new self('MalformedPropertyName');
     }
 
     public static function RangeFromTypeReadToItsEnd(): self
     {
-        if (!isset(self::$instances['RangeFromTypeReadToItsEnd'])) {
-            self::$instances['RangeFromTypeReadToItsEnd'] = new self('RangeFromTypeReadToItsEnd', 'RangeFromTypeReadToItsEnd');
-        }
-
-        return self::$instances['RangeFromTypeReadToItsEnd'];
+        return self::$instances['RangeFromTypeReadToItsEnd'] ??= new self('RangeFromTypeReadToItsEnd');
     }
 
     public static function EmptyQuoteSkippedAfterClassEscape(): self
     {
-        if (!isset(self::$instances['EmptyQuoteSkippedAfterClassEscape'])) {
-            self::$instances['EmptyQuoteSkippedAfterClassEscape'] = new self('EmptyQuoteSkippedAfterClassEscape', 'EmptyQuoteSkippedAfterClassEscape');
-        }
-
-        return self::$instances['EmptyQuoteSkippedAfterClassEscape'];
+        return self::$instances['EmptyQuoteSkippedAfterClassEscape'] ??= new self('EmptyQuoteSkippedAfterClassEscape');
     }
 
     public static function SpacedHyphenAfterClassEscapeMakesRange(): self
     {
-        if (!isset(self::$instances['SpacedHyphenAfterClassEscapeMakesRange'])) {
-            self::$instances['SpacedHyphenAfterClassEscapeMakesRange'] = new self('SpacedHyphenAfterClassEscapeMakesRange', 'SpacedHyphenAfterClassEscapeMakesRange');
-        }
-
-        return self::$instances['SpacedHyphenAfterClassEscapeMakesRange'];
+        return self::$instances['SpacedHyphenAfterClassEscapeMakesRange'] ??= new self('SpacedHyphenAfterClassEscapeMakesRange');
     }
 
     public static function ClassBackslashKIsLetter(): self
     {
-        if (!isset(self::$instances['ClassBackslashKIsLetter'])) {
-            self::$instances['ClassBackslashKIsLetter'] = new self('ClassBackslashKIsLetter', 'ClassBackslashKIsLetter');
-        }
-
-        return self::$instances['ClassBackslashKIsLetter'];
+        return self::$instances['ClassBackslashKIsLetter'] ??= new self('ClassBackslashKIsLetter');
     }
 
     public static function HexEscapeNeedsDigits(): self
     {
-        if (!isset(self::$instances['HexEscapeNeedsDigits'])) {
-            self::$instances['HexEscapeNeedsDigits'] = new self('HexEscapeNeedsDigits', 'HexEscapeNeedsDigits');
-        }
-
-        return self::$instances['HexEscapeNeedsDigits'];
+        return self::$instances['HexEscapeNeedsDigits'] ??= new self('HexEscapeNeedsDigits');
     }
 
     public static function EmptyQuoteOpeningClassIsUnclosed(): self
     {
-        if (!isset(self::$instances['EmptyQuoteOpeningClassIsUnclosed'])) {
-            self::$instances['EmptyQuoteOpeningClassIsUnclosed'] = new self('EmptyQuoteOpeningClassIsUnclosed', 'EmptyQuoteOpeningClassIsUnclosed');
-        }
-
-        return self::$instances['EmptyQuoteOpeningClassIsUnclosed'];
+        return self::$instances['EmptyQuoteOpeningClassIsUnclosed'] ??= new self('EmptyQuoteOpeningClassIsUnclosed');
     }
 
     public static function ClassEscapeEndingRangeRefusedAsEscape(): self
     {
-        if (!isset(self::$instances['ClassEscapeEndingRangeRefusedAsEscape'])) {
-            self::$instances['ClassEscapeEndingRangeRefusedAsEscape'] = new self('ClassEscapeEndingRangeRefusedAsEscape', 'ClassEscapeEndingRangeRefusedAsEscape');
-        }
-
-        return self::$instances['ClassEscapeEndingRangeRefusedAsEscape'];
+        return self::$instances['ClassEscapeEndingRangeRefusedAsEscape'] ??= new self('ClassEscapeEndingRangeRefusedAsEscape');
     }
 
     public static function NamedCharacterBraceRefusedInClass(): self
     {
-        if (!isset(self::$instances['NamedCharacterBraceRefusedInClass'])) {
-            self::$instances['NamedCharacterBraceRefusedInClass'] = new self('NamedCharacterBraceRefusedInClass', 'NamedCharacterBraceRefusedInClass');
-        }
-
-        return self::$instances['NamedCharacterBraceRefusedInClass'];
+        return self::$instances['NamedCharacterBraceRefusedInClass'] ??= new self('NamedCharacterBraceRefusedInClass');
     }
 
     public static function ClassesCompiledFromMergedRanges(): self
     {
-        if (!isset(self::$instances['ClassesCompiledFromMergedRanges'])) {
-            self::$instances['ClassesCompiledFromMergedRanges'] = new self('ClassesCompiledFromMergedRanges', 'ClassesCompiledFromMergedRanges');
-        }
-
-        return self::$instances['ClassesCompiledFromMergedRanges'];
+        return self::$instances['ClassesCompiledFromMergedRanges'] ??= new self('ClassesCompiledFromMergedRanges');
     }
 
     public static function CaselessReferenceHoldsItsCaseRules(): self
     {
-        if (!isset(self::$instances['CaselessReferenceHoldsItsCaseRules'])) {
-            self::$instances['CaselessReferenceHoldsItsCaseRules'] = new self('CaselessReferenceHoldsItsCaseRules', 'CaselessReferenceHoldsItsCaseRules');
-        }
-
-        return self::$instances['CaselessReferenceHoldsItsCaseRules'];
+        return self::$instances['CaselessReferenceHoldsItsCaseRules'] ??= new self('CaselessReferenceHoldsItsCaseRules');
     }
 
     public static function VersionConditionWholeNumbers(): self
     {
-        if (!isset(self::$instances['VersionConditionWholeNumbers'])) {
-            self::$instances['VersionConditionWholeNumbers'] = new self('VersionConditionWholeNumbers', 'VersionConditionWholeNumbers');
-        }
-
-        return self::$instances['VersionConditionWholeNumbers'];
+        return self::$instances['VersionConditionWholeNumbers'] ??= new self('VersionConditionWholeNumbers');
     }
 
     public static function CallsReturnCaptureGroups(): self
     {
-        if (!isset(self::$instances['CallsReturnCaptureGroups'])) {
-            self::$instances['CallsReturnCaptureGroups'] = new self('CallsReturnCaptureGroups', 'CallsReturnCaptureGroups');
-        }
-
-        return self::$instances['CallsReturnCaptureGroups'];
+        return self::$instances['CallsReturnCaptureGroups'] ??= new self('CallsReturnCaptureGroups');
     }
 
     public static function GroupListErrors(): self
     {
-        if (!isset(self::$instances['GroupListErrors'])) {
-            self::$instances['GroupListErrors'] = new self('GroupListErrors', 'GroupListErrors');
-        }
-
-        return self::$instances['GroupListErrors'];
+        return self::$instances['GroupListErrors'] ??= new self('GroupListErrors');
     }
 
     public static function GReferenceNumberReadBeforeClosing(): self
     {
-        if (!isset(self::$instances['GReferenceNumberReadBeforeClosing'])) {
-            self::$instances['GReferenceNumberReadBeforeClosing'] = new self('GReferenceNumberReadBeforeClosing', 'GReferenceNumberReadBeforeClosing');
-        }
-
-        return self::$instances['GReferenceNumberReadBeforeClosing'];
+        return self::$instances['GReferenceNumberReadBeforeClosing'] ??= new self('GReferenceNumberReadBeforeClosing');
     }
 
     public static function NamedCodePointReadBeforeModeCheck(): self
     {
-        if (!isset(self::$instances['NamedCodePointReadBeforeModeCheck'])) {
-            self::$instances['NamedCodePointReadBeforeModeCheck'] = new self('NamedCodePointReadBeforeModeCheck', 'NamedCodePointReadBeforeModeCheck');
-        }
-
-        return self::$instances['NamedCodePointReadBeforeModeCheck'];
+        return self::$instances['NamedCodePointReadBeforeModeCheck'] ??= new self('NamedCodePointReadBeforeModeCheck');
     }
 
     public static function CalloutConditionErrorAtItemStart(): self
     {
-        if (!isset(self::$instances['CalloutConditionErrorAtItemStart'])) {
-            self::$instances['CalloutConditionErrorAtItemStart'] = new self('CalloutConditionErrorAtItemStart', 'CalloutConditionErrorAtItemStart');
-        }
-
-        return self::$instances['CalloutConditionErrorAtItemStart'];
+        return self::$instances['CalloutConditionErrorAtItemStart'] ??= new self('CalloutConditionErrorAtItemStart');
     }
 
     public static function ErrorOffsetPastTheFault(): self
     {
-        if (!isset(self::$instances['ErrorOffsetPastTheFault'])) {
-            self::$instances['ErrorOffsetPastTheFault'] = new self('ErrorOffsetPastTheFault', 'ErrorOffsetPastTheFault');
-        }
-
-        return self::$instances['ErrorOffsetPastTheFault'];
+        return self::$instances['ErrorOffsetPastTheFault'] ??= new self('ErrorOffsetPastTheFault');
     }
 
     public static function AlphaNameAtPatternEndIsUnclosed(): self
     {
-        if (!isset(self::$instances['AlphaNameAtPatternEndIsUnclosed'])) {
-            self::$instances['AlphaNameAtPatternEndIsUnclosed'] = new self('AlphaNameAtPatternEndIsUnclosed', 'AlphaNameAtPatternEndIsUnclosed');
-        }
-
-        return self::$instances['AlphaNameAtPatternEndIsUnclosed'];
+        return self::$instances['AlphaNameAtPatternEndIsUnclosed'] ??= new self('AlphaNameAtPatternEndIsUnclosed');
     }
 
     public static function VersionConditionLeftOpenIsVersionError(): self
     {
-        if (!isset(self::$instances['VersionConditionLeftOpenIsVersionError'])) {
-            self::$instances['VersionConditionLeftOpenIsVersionError'] = new self('VersionConditionLeftOpenIsVersionError', 'VersionConditionLeftOpenIsVersionError');
-        }
-
-        return self::$instances['VersionConditionLeftOpenIsVersionError'];
+        return self::$instances['VersionConditionLeftOpenIsVersionError'] ??= new self('VersionConditionLeftOpenIsVersionError');
     }
 
     public static function BranchCountErrorOffTheConditionName(): self
     {
-        if (!isset(self::$instances['BranchCountErrorOffTheConditionName'])) {
-            self::$instances['BranchCountErrorOffTheConditionName'] = new self('BranchCountErrorOffTheConditionName', 'BranchCountErrorOffTheConditionName');
-        }
-
-        return self::$instances['BranchCountErrorOffTheConditionName'];
+        return self::$instances['BranchCountErrorOffTheConditionName'] ??= new self('BranchCountErrorOffTheConditionName');
     }
 
     public static function SurrogateRefusedBeforeBrace(): self
     {
-        if (!isset(self::$instances['SurrogateRefusedBeforeBrace'])) {
-            self::$instances['SurrogateRefusedBeforeBrace'] = new self('SurrogateRefusedBeforeBrace', 'SurrogateRefusedBeforeBrace');
-        }
-
-        return self::$instances['SurrogateRefusedBeforeBrace'];
+        return self::$instances['SurrogateRefusedBeforeBrace'] ??= new self('SurrogateRefusedBeforeBrace');
     }
 
     public static function TooLargeAtPatternStart(): self
     {
-        if (!isset(self::$instances['TooLargeAtPatternStart'])) {
-            self::$instances['TooLargeAtPatternStart'] = new self('TooLargeAtPatternStart', 'TooLargeAtPatternStart');
-        }
-
-        return self::$instances['TooLargeAtPatternStart'];
+        return self::$instances['TooLargeAtPatternStart'] ??= new self('TooLargeAtPatternStart');
     }
 
     public static function ScanSubstringListsEachGroupOnce(): self
     {
-        if (!isset(self::$instances['ScanSubstringListsEachGroupOnce'])) {
-            self::$instances['ScanSubstringListsEachGroupOnce'] = new self('ScanSubstringListsEachGroupOnce', 'ScanSubstringListsEachGroupOnce');
-        }
-
-        return self::$instances['ScanSubstringListsEachGroupOnce'];
+        return self::$instances['ScanSubstringListsEachGroupOnce'] ??= new self('ScanSubstringListsEachGroupOnce');
     }
 
     public static function UnclosedBraceAtPatternEnd(): self
     {
-        if (!isset(self::$instances['UnclosedBraceAtPatternEnd'])) {
-            self::$instances['UnclosedBraceAtPatternEnd'] = new self('UnclosedBraceAtPatternEnd', 'UnclosedBraceAtPatternEnd');
-        }
-
-        return self::$instances['UnclosedBraceAtPatternEnd'];
+        return self::$instances['UnclosedBraceAtPatternEnd'] ??= new self('UnclosedBraceAtPatternEnd');
     }
 
     public static function ExtendedClassBesideLookbehindCompiles(): self
     {
-        if (!isset(self::$instances['ExtendedClassBesideLookbehindCompiles'])) {
-            self::$instances['ExtendedClassBesideLookbehindCompiles'] = new self('ExtendedClassBesideLookbehindCompiles', 'ExtendedClassBesideLookbehindCompiles');
-        }
-
-        return self::$instances['ExtendedClassBesideLookbehindCompiles'];
+        return self::$instances['ExtendedClassBesideLookbehindCompiles'] ??= new self('ExtendedClassBesideLookbehindCompiles');
     }
 
     public static function TooLargeAtGroupEndReportedAtPatternEnd(): self
     {
-        if (!isset(self::$instances['TooLargeAtGroupEndReportedAtPatternEnd'])) {
-            self::$instances['TooLargeAtGroupEndReportedAtPatternEnd'] = new self('TooLargeAtGroupEndReportedAtPatternEnd', 'TooLargeAtGroupEndReportedAtPatternEnd');
-        }
-
-        return self::$instances['TooLargeAtGroupEndReportedAtPatternEnd'];
+        return self::$instances['TooLargeAtGroupEndReportedAtPatternEnd'] ??= new self('TooLargeAtGroupEndReportedAtPatternEnd');
     }
 
     public static function PossessiveReferenceRepeatedInPlace(): self
     {
-        if (!isset(self::$instances['PossessiveReferenceRepeatedInPlace'])) {
-            self::$instances['PossessiveReferenceRepeatedInPlace'] = new self('PossessiveReferenceRepeatedInPlace', 'PossessiveReferenceRepeatedInPlace');
-        }
-
-        return self::$instances['PossessiveReferenceRepeatedInPlace'];
+        return self::$instances['PossessiveReferenceRepeatedInPlace'] ??= new self('PossessiveReferenceRepeatedInPlace');
     }
 
     /**
@@ -631,6 +367,7 @@ final class PcreFeature
             self::VariableLengthLookbehind(),
             self::CaselessRestrictModifier(),
             self::AsciiOptions(),
+            self::UcpWordTakesMarksAndConnectors(),
             self::LongGroupNames(),
             self::ScanSubstring(),
             self::ExtendedCharClass(),
@@ -699,6 +436,7 @@ final class PcreFeature
             'VariableLengthLookbehind' => '10.43',
             'CaselessRestrictModifier' => '10.43',
             'AsciiOptions' => '10.43',
+            'UcpWordTakesMarksAndConnectors' => '10.43',
             'LongGroupNames' => '10.44',
             'ScanSubstring' => '10.45',
             'ExtendedCharClass' => '10.45',

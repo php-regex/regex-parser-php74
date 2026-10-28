@@ -21,22 +21,16 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class SubroutineNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $reference;
-
+    public string $reference;
     /**
-     *
-     * @var string
      */
-    public $syntax;
-
+    public string $syntax;
     /**
      * @var list<string>
      *
      */
-    public $returnedGroups = [];
+    public array $returnedGroups = [];
 
     /**
      * @param list<string> $returnedGroups the groups the call returns, as

@@ -89,21 +89,21 @@ final class NoJit
         $close = Delimiters::BRACKETS[$open] ?? $open;
         $length = \strlen($trimmed);
         $depth = 1;
-        for ($index = 1; $index < $length; $index++) {
+        for ($index = 1; $index < $length; ++$index) {
             $character = $trimmed[$index];
             if ('\\' === $character && $index + 1 < $length) {
-                $index++;
+                ++$index;
 
                 continue;
             }
 
             if ($close === $character) {
-                $depth--;
+                --$depth;
                 if ($open === $close || 0 === $depth) {
                     return [$open, (string) substr($trimmed, 1, $index - 1), $close, (string) substr($trimmed, $index + 1)];
                 }
             } elseif ($open === $character) {
-                $depth++;
+                ++$depth;
             }
         }
 

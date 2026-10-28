@@ -24,16 +24,11 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class VersionConditionNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $operator;
-
+    public string $operator;
     /**
-     *
-     * @var string
      */
-    public $version;
+    public string $version;
 
     public function __construct(
         string $operator,

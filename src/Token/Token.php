@@ -25,30 +25,19 @@ namespace PHPRegex\Parser\Token;
 final class Token
 {
     /**
-     *
-     * @var \PHPRegex\Parser\Token\TokenType
-     */
-    public $type;
-
-    /**
-     *
-     * @var string
-     */
-    public $value;
-
-    /**
-     *
-     * @var int
-     */
-    public $position;
-
-    /**
      * Bytes of the pattern this token was cut from.
      *
-     *
-     * @var int
      */
-    public $sourceLength;
+    public int $sourceLength;
+    /**
+     */
+    public TokenType $type;
+    /**
+     */
+    public string $value;
+    /**
+     */
+    public int $position;
 
     /**
      * @internal the lexer builds the tokens
@@ -58,7 +47,7 @@ final class Token
      *                               rewrite
      */
     public function __construct(
-        $type,
+        TokenType $type,
         string $value,
         int $position,
         ?int $sourceLength = null

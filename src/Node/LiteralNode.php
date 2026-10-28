@@ -21,16 +21,11 @@ use PHPRegex\Parser\NodeVisitorInterface;
 final class LiteralNode extends AbstractNode
 {
     /**
-     *
-     * @var string
      */
-    public $value;
-
+    public string $value;
     /**
-     *
-     * @var bool
      */
-    public $isRaw = false;
+    public bool $isRaw = false;
 
     public function __construct(
         string $value,
