@@ -13,6 +13,9 @@ final class QuantifierType implements \PHPRegex\Parser\BackedEnum
     /** @var array<string, self> */
     private static array $instances = [];
 
+    /** @var array<int|string, self>|null */
+    private static ?array $byValue = null;
+
     public string $name;
 
     public string $value;
@@ -62,12 +65,13 @@ final class QuantifierType implements \PHPRegex\Parser\BackedEnum
 
     public static function tryFrom(string $value): ?self
     {
-        foreach (self::cases() as $case) {
-            if ($case->value === $value) {
-                return $case;
+        if (null === self::$byValue) {
+            self::$byValue = [];
+            foreach (self::cases() as $case) {
+                self::$byValue[$case->value] = $case;
             }
         }
 
-        return null;
+        return self::$byValue[$value] ?? null;
     }
 }

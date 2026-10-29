@@ -57,12 +57,12 @@ final class ExtendedClassParser
      */
     private int $maxRecursionDepth;
     /**
-     * @var \Closure(list<Token>, bool):NodeInterface
+     * @var \Closure(list<Token>, bool): NodeInterface
      *
      */
     private \Closure $readPart;
     /**
-     * @var \Closure(int, int):void
+     * @var \Closure(int, int): void
      *
      */
     private \Closure $nest;

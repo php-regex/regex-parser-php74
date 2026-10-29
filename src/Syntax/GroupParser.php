@@ -103,13 +103,13 @@ final class GroupParser
     private GroupNameReader $groupNames;
 
     /**
-     * @var \Closure():NodeInterface
+     * @var \Closure(): NodeInterface
      *
      */
     private \Closure $branches;
 
     /**
-     * @var \Closure():NodeInterface
+     * @var \Closure(): NodeInterface
      *
      */
     private \Closure $resetBranches;

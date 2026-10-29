@@ -248,7 +248,7 @@ final class CompiledLength
      */
     private ?GroupIndex $groups = null;
     /**
-     * @var \Closure(NodeInterface):int
+     * @var \Closure(NodeInterface): int
      *
      */
     private \Closure $floor;

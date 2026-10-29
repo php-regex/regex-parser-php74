@@ -40,7 +40,7 @@ final class PsrCacheAdapter implements RemovableCacheInterface
      */
     private string $prefix = 'regex_';
     /**
-     * @var \Closure(string):mixed|null
+     * @var \Closure(string): mixed|null
      *
      */
     private ?\Closure $keyFactory = null;

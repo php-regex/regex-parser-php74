@@ -60,12 +60,12 @@ final class VerbParser
      */
     private ParseState $state;
     /**
-     * @var \Closure():NodeInterface
+     * @var \Closure(): NodeInterface
      *
      */
     private \Closure $branches;
     /**
-     * @var \Closure(string, int):NodeInterface
+     * @var \Closure(string, int): NodeInterface
      *
      */
     private \Closure $readApart;

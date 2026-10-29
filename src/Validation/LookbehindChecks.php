@@ -97,7 +97,7 @@ final class LookbehindChecks
      */
     private GroupIndex $groups;
     /**
-     * @var \Closure((BackrefNode|SubroutineNode)):void
+     * @var \Closure(BackrefNode|SubroutineNode): void
      *
      */
     private \Closure $checkReference;

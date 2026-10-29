@@ -48,7 +48,7 @@ final class ConditionalChecks
      */
     private PcreTarget $target;
     /**
-     * @var \Closure(SemanticErrorException):void
+     * @var \Closure(SemanticErrorException): void
      *
      */
     private \Closure $branchCount;

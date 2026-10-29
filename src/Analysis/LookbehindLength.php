@@ -154,17 +154,17 @@ final class LookbehindLength
         ];
     }
     /**
-     * @var \Closure(GroupNode, array<int, true>):void|null
+     * @var \Closure(GroupNode, array<int, true>): void|null
      *
      */
     private ?\Closure $onLookaround = null;
     /**
-     * @var \Closure(NodeInterface):void|null
+     * @var \Closure(NodeInterface): void|null
      *
      */
     private ?\Closure $onGroupBody = null;
     /**
-     * @var \Closure(SubroutineNode|BackrefNode, list<GroupNode>):void|null
+     * @var \Closure(SubroutineNode|BackrefNode, list<GroupNode>): void|null
      *
      */
     private ?\Closure $onReference = null;

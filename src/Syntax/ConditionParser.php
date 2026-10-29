@@ -74,27 +74,27 @@ final class ConditionParser
      */
     private array $patternNames;
     /**
-     * @var \Closure():NodeInterface
+     * @var \Closure(): NodeInterface
      *
      */
     private \Closure $branches;
     /**
-     * @var \Closure(int, bool):?GroupNode
+     * @var \Closure(int, bool): ?GroupNode
      *
      */
     private \Closure $lookaround;
     /**
-     * @var \Closure(Token, int):NodeInterface
+     * @var \Closure(Token, int): NodeInterface
      *
      */
     private \Closure $verb;
     /**
-     * @var \Closure():int
+     * @var \Closure(): int
      *
      */
     private \Closure $skipTrivia;
     /**
-     * @var \Closure(string):void
+     * @var \Closure(string): void
      *
      */
     private \Closure $recursionTest;

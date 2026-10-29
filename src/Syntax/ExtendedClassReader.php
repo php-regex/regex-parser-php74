@@ -54,7 +54,7 @@ final class ExtendedClassReader
      */
     private string $pattern;
     /**
-     * @var \Closure(string, int):NodeInterface
+     * @var \Closure(string, int): NodeInterface
      *
      */
     private \Closure $escape;
@@ -81,12 +81,12 @@ final class ExtendedClassReader
         ];
     }
     /**
-     * @var \Closure(string, int):NodeInterface
+     * @var \Closure(string, int): NodeInterface
      *
      */
     private \Closure $class;
     /**
-     * @var \Closure(LexerException|LimitException|ParserException, int, list<NodeInterface>):never
+     * @var \Closure(LexerException|LimitException|ParserException, int, list<NodeInterface>): never
      *
      */
     private \Closure $fail;
@@ -100,7 +100,7 @@ final class ExtendedClassReader
      */
     private int $maxOperations = 1024;
     /**
-     * @var \Closure(int, int):void|null
+     * @var \Closure(int, int): void|null
      *
      */
     private ?\Closure $nest = null;

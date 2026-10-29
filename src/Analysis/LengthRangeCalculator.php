@@ -61,7 +61,7 @@ final class LengthRangeCalculator extends AbstractNodeVisitor
 {
     private bool $unicode = false;
     /**
-     * @var \Closure(SubroutineNode):?NodeInterface|null
+     * @var \Closure(SubroutineNode): ?NodeInterface|null
      *
      */
     private ?\Closure $calledBody = null;

@@ -60,7 +60,7 @@ final class ReferenceChecks
      */
     private PcreTarget $target;
     /**
-     * @var \Closure(SemanticErrorException):void
+     * @var \Closure(SemanticErrorException): void
      *
      */
     private \Closure $missing;
