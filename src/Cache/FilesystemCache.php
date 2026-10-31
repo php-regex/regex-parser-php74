@@ -15,6 +15,7 @@ namespace PHPRegex\Parser\Cache;
 
 use PHPRegex\Parser\Exception\CacheException;
 use PHPRegex\Parser\Node\RegexNode;
+use PHPRegex\Parser\Text\Path;
 
 /**
  * Trees kept in files under a directory the caller names, as data read
@@ -124,7 +125,7 @@ final class FilesystemCache implements RemovableCacheInterface
      */
     private function isTrusted(): bool
     {
-        if ('\\' === \DIRECTORY_SEPARATOR || !is_dir($this->directory)) {
+        if (Path::onWindows() || !is_dir($this->directory)) {
             return true;
         }
 
